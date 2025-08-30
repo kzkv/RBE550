@@ -1,15 +1,13 @@
 # Tom Kazakov
 # RBE 550
 # Assignment 0
-# Obstacle field: parametric generation for the 128x128 grid filling with tetrominoes without overlap
+# Obstacle field: parametric generation for the 128x128 grid filling with tetrominoes
 # Gen AI usage: ChatGPT to refresh myself on matplotlib and numpy syntax
-
-import random
 
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy import signedinteger
-from numpy._typing import _32Bit, _64Bit
+
+rng = np.random.default_rng()
 
 # Assumptions for the exercise
 """
@@ -66,7 +64,7 @@ def rotate(shape: np.ndarray):
     """
     Outputs a random rotation of the given shape, -90 to 180 degrees.
     """
-    return np.rot90(shape, random.choice([-1, 0, 1, 2]))
+    return np.rot90(shape, rng.choice([-1, 0, 1, 2]))
 
 
 grid_size = 128
@@ -85,7 +83,8 @@ adding more computing the coverage occasionally (batch trickling; fancy) or on e
 Another concern is going outside of the field boundaries. This is not valid according to the chosen assumptions. 
 """
 
-rho = 0.70  # EDIT THIS
+rho = 0.70  # <----- EDIT THIS NUMBER
+
 print(f"Target coverage rate: {rho * 100:.2f}%")
 cell_target = int(rho * grid_size * grid_size)
 
@@ -94,15 +93,17 @@ cell_coverage = 0
 
 while coverage < rho:
     """
-    Work in batches; each assumes no overlap.
+    Work in batches; each assumes no overlap. This can be further improved by gain modeling and a basic control loop. 
     """
-    # calculate the batch, place at least one tetromino
+    # Calculate the batch, place at least one tetromino
     placements_count = max(1, int((cell_target - cell_coverage) / 4))
     print(f"Batch placements: {placements_count}")
 
     for _ in range(placements_count):
-        # get a shape
-        shape = rotate(random.choice(canonical_shapes))
+        # Get a shape
+        idx = rng.integers(len(canonical_shapes))
+        shape = rotate(canonical_shapes[int(idx)])
+        # I'm not a huge fan of a two-step syntax for numpy, but it feels more pythonic than importing `random`
         mask = np.array(shape)
 
         # place the shape in a random location using masking
@@ -111,6 +112,7 @@ while coverage < rho:
         row, col = np.random.randint(0, grid_size - mask_height + 1), np.random.randint(0, grid_size - mask_width + 1)
         substitute = grid[row:row + mask_height, col:col + mask_width]
         substitute[:] = np.maximum(substitute, mask)
+        # We could count added coverage here and increment in-flight, but I would want to unit-test this if implemented.
 
     cell_coverage = np.count_nonzero(grid)
     coverage = cell_coverage / grid_size / grid_size
