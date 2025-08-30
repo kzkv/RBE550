@@ -3,8 +3,8 @@
 # Assignment 0
 # Turtles: implement Victor Sierra search pattern
 
-# This is a dirty, but economical implementation to handle exceptions in `turtle` and `tkinter`
-# getting raised because of the interrupted loop in the `search` function
+# This is a dirty try/catch, but economical implementation to handle exceptions in `turtle` and `tkinter`
+# getting raised because of the interrupted loop in the `search` function.
 
 import turtle
 
@@ -15,6 +15,7 @@ turtle.mode("logo")  # Use 0 as the north direction
 t = turtle.Turtle()
 screen = turtle.Screen()
 screen.setup(width=500, height=500)
+
 
 def search():
     try:
@@ -29,7 +30,7 @@ def search():
             t.right(turn_angle)
             t.forward(leg)
         t.right(next_search_angle)
-    except Exception:  # ew
+    except turtle.Terminator:  # Sufficient catch-all to cover all of the interrupted loop exceptions.
         pass
     screen.ontimer(search, 1000)  # Invoke another with a delay for me to take a screenshot
 
