@@ -30,7 +30,7 @@ def search():
             t.right(turn_angle)
             t.forward(leg)
         t.right(next_search_angle)
-    except turtle.Terminator:  # Sufficient catch-all to cover all of the interrupted loop exceptions.
+    except turtle.Terminator:  # Sufficient catch-all to cover the interrupted loop exceptions.
         pass
     screen.ontimer(search, 1000)  # Invoke another with a delay for me to take a screenshot
 
