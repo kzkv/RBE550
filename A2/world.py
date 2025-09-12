@@ -129,6 +129,8 @@ class World:
             # Check boundaries
             if not (0 <= new_y < self.grid_size and 0 <= new_x < self.grid_size):
                 continue
+                # I was too lazy to write unit tests for this, so I just manually tested it by placing the hero
+                # at 0,0 and 63,63. Seems to be working as expected.
 
             cell = self.grid[new_y, new_x]
             if cell == HERO:

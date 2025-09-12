@@ -36,3 +36,5 @@ def render_stats(counts):
 
 def render_game_over():
     print(term.red1_on_black(" YOU DIED "), end="\n" * 2)
+    # https://www.youtube.com/watch?v=-ZGlaAxB7nI
+
