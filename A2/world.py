@@ -31,8 +31,7 @@ GOAL = 5
 WUMPUS = 6
 
 # Starting counts of objects
-HERO_COUNT = 1
-ENEMY_COUNT = 10
+ENEMY_COUNT = 0
 
 
 def rotate(shape: np.ndarray):
@@ -51,8 +50,20 @@ class World:
         self.grid_size = grid_size
         self.rho = rho
         self.grid = np.zeros((grid_size, grid_size), dtype=int)
+
+        # location of the hero
+        self.hero_y, self.hero_x = 0, 0
+        self.hero_alive = True
+
+        # location of the goal
+        self.goal_y, self.goal_x = 0, 0
+        self.goal_reached = False
+
+        # init
         self.place_obstacles()
         self.place_robots()
+        self.place_goal()
+
 
     def place_obstacles(self):
         cell_target = int(self.rho * self.grid_size * self.grid_size)
@@ -96,11 +107,15 @@ class World:
         return y, x
 
     def place_robots(self):
-        for i in range(HERO_COUNT):
-            self.grid[self.random_unoccupied_cell()] = HERO
+        self.hero_y, self.hero_x = self.random_unoccupied_cell()
+        self.grid[self.hero_y, self.hero_x] = HERO
 
         for i in range(ENEMY_COUNT):
             self.grid[self.random_unoccupied_cell()] = ENEMY
+
+    def place_goal(self):
+        self.goal_y, self.goal_x = self.random_unoccupied_cell()
+        self.grid[self.goal_y, self.goal_x] = GOAL
 
     def calculate_stats(self):
         heroes = np.count_nonzero(self.grid == HERO)
@@ -113,18 +128,18 @@ class World:
         # Move enemies toward the hero; convert to husk on collision
         # Refactored from the boilerplate generated via Jetbrains AI
 
-        hero_locs = np.argwhere(self.grid == HERO)
-        if hero_locs.size == 0:
+        # TODO: chose where to localize the hero and how to establish they have expired
+        if not self.hero_alive:
             return
-
-        hero_y, hero_x = hero_locs[0]  # This implementation assumes at most one hero
 
         enemy_locs = np.argwhere(self.grid == ENEMY)
         # There is an inherent order of these calculations, it might be worth to consider randomizing
         for y, x in enemy_locs:
             # Calculate the direction and new coordinates
-            dy, dx = np.sign(hero_y - y), np.sign(hero_x - x)
+            dy, dx = np.sign(self.hero_y - y), np.sign(self.hero_x - x)
             new_y, new_x = y + dy, x + dx
+            # TODO:!!! eliminate diagonal movement
+            # consider random vs min dist diagonally
 
             # Check boundaries
             if not (0 <= new_y < self.grid_size and 0 <= new_x < self.grid_size):

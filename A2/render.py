@@ -6,27 +6,44 @@
 import numpy as np
 from blessed import Terminal
 from world import EMPTY, WALL, HERO, ENEMY, HUSK, GOAL
+from time import sleep
 
 term = Terminal()
 
 # Glyphs (need more dwarfs)
+# GLYPHS = {
+#     EMPTY: term.on_gray93(" "),
+#     WALL: term.on_gray60(" "),
+#     HERO: term.black_on_gray93("●"),
+#     ENEMY: term.red1_on_gray93("▲"),
+#     HUSK: term.white_on_brown("x"),
+#     GOAL: term.white_on_green("◎"),
+#     # TODO: teleports @ and wumpus ☺
+# }
+
+# Glyphs dict (needs more dwarfs); defines overridable attributes separate from the character
 GLYPHS = {
-    EMPTY: term.gray93("█"),
-    WALL: term.gray50("▒"),
-    HERO: term.black_on_gray93("●"),
-    ENEMY: term.red1_on_gray93("▲"),
-    HUSK: term.white_on_brown("%"),
-    GOAL: term.green("◎"),
-    # TODO: teleports @ and wumpus ☺
+    EMPTY: (term.on_gray93, " "),
+    WALL: (term.on_gray60, " "),
+    HERO: (term.black_on_gray93, "●"),
+    ENEMY: (term.red1_on_gray93, "▲"),
+    HUSK: (term.white_on_brown, "x"),
+    GOAL: (term.white_on_green, "◎"),
 }
 
 
-def render_grid(grid: np.ndarray):
+def render_grid(grid: np.ndarray, path: list):
     print(term.clear)
     H, W = grid.shape
     for y in range(H):
-        row = "".join(GLYPHS[int(v)] for v in grid[y])
-        print(row)
+        for x in range(W):
+            attrs, char = GLYPHS[int(grid[y, x])]
+            if (y, x) in path:  # Highlight the path
+                cell = f"{term.black_on_lightgreen}{char}{term.normal}"
+            else:
+                cell = f"{attrs}{char}{term.normal}"
+            print(cell, end="")
+        print()
 
 
 def render_stats(counts):
@@ -35,6 +52,12 @@ def render_stats(counts):
 
 
 def render_game_over():
-    print(term.red1_on_black(" YOU DIED "), end="\n" * 2)
-    # https://www.youtube.com/watch?v=-ZGlaAxB7nI
+    print(term.red1_on_black("          \n YOU DIED \n          "), end="\n" * 2)
+    # TODO: add the Dark Souls sound effect https://www.youtube.com/watch?v=-ZGlaAxB7nI
 
+#
+# def render_path(path):
+#     for p in path:
+#         print(p)
+#         term.move_xy(*p)
+#         sleep(1)

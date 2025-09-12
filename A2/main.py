@@ -4,6 +4,13 @@
 # Gen AI usage: ChatGPT to ideate the pseudo-graphics implementation tech stack
 # TODO: is there a better way to render than squishing the font to 0.7 line height?
 
+# TODO: reflect in the report one of the principal decisions: allow 4-connected or 8-connected movement.
+"""
+4-connected: less elegant movement, but avoids sqrt(2) vs equal-cost movement for diagonal compared to orthogonal.
+Also simplifies the situation with corner-cutting.
+Might simplify implementation with something like NetworkX (which connects grid cells orthogonally)
+"""
+
 from world import World
 import logging
 from render import render_grid, render_stats, render_game_over
@@ -20,6 +27,11 @@ logger.addHandler(handler)
 
 world = World(grid_size=64, rho=0.20)
 
+# Init
+render_grid(world.grid)
+sleep(TICK_TIME*5)  # Let the observer situate themselves with the map
+
+# Main game loop
 while True:
     render_grid(world.grid)
 
