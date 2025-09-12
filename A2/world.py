@@ -21,6 +21,19 @@ canonical_shapes = (
     [[1, 1, 1], [0, 1, 0]]  # T
 )
 
+# Mapping of concepts to grid values
+EMPTY = 0
+WALL = 1
+HERO = 2
+ENEMY = 3
+HUSK = 4
+GOAL = 5
+WUMPUS = 6
+
+# Starting counts of objects
+HERO_COUNT = 1
+ENEMY_COUNT = 10
+
 
 def rotate(shape: np.ndarray):
     """
@@ -39,6 +52,7 @@ class World:
         self.rho = rho
         self.grid = np.zeros((grid_size, grid_size), dtype=int)
         self.place_obstacles()
+        self.place_robots()
 
     def place_obstacles(self):
         cell_target = int(self.rho * self.grid_size * self.grid_size)
@@ -75,3 +89,22 @@ class World:
         coverage = np.count_nonzero(self.grid) / self.grid_size / self.grid_size
         logger.info(f"Resulting coverage: ~{coverage * 100:.2f}%")
         logger.info(f"Target coverage rate: {self.rho * 100:.2f}%")
+
+    def random_unoccupied_cell(self) -> tuple[int, int]:
+        coords = np.argwhere(self.grid == EMPTY)
+        y, x = coords[np.random.randint(len(coords))]
+        return y, x
+
+    def place_robots(self):
+        for i in range(HERO_COUNT):
+            self.grid[self.random_unoccupied_cell()] = HERO
+
+        for i in range(ENEMY_COUNT):
+            self.grid[self.random_unoccupied_cell()] = ENEMY
+
+    def calculate_stats(self):
+        heroes = np.count_nonzero(self.grid == HERO)
+        enemies = np.count_nonzero(self.grid == ENEMY)
+        husks = np.count_nonzero(self.grid == HUSK)
+        wumpi = np.count_nonzero(self.grid == WUMPUS)
+        return heroes, enemies, husks, wumpi

@@ -3,9 +3,11 @@
 # Assignment 2
 # Gen AI usage: ChatGPT to ideate the pseudo-graphics implementation tech stack
 
-import matplotlib.pyplot as plt
+# TODO: is there a better way to render than squishing the font to 0.6 height 1.4 width?
+
 from world import World
 import logging
+from render import render_grid, render_stats
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -16,8 +18,5 @@ logger.addHandler(handler)
 
 world = World(grid_size=64, rho=0.20)
 
-# Show with matplotlib
-plt.figure(figsize=(10, 10))  # image size in inches (ew, why inches)
-plt.imshow(world.grid, cmap="gray_r")
-plt.axis("on")
-plt.show()
+render_grid(world.grid)
+render_stats(world.calculate_stats())
