@@ -87,8 +87,8 @@ class World:
 
         # Resulting coverage
         coverage = np.count_nonzero(self.grid) / self.grid_size / self.grid_size
-        logger.info(f"Resulting coverage: ~{coverage * 100:.2f}%")
-        logger.info(f"Target coverage rate: {self.rho * 100:.2f}%")
+        logger.debug(f"Resulting coverage: ~{coverage * 100:.2f}%")
+        logger.debug(f"Target coverage rate: {self.rho * 100:.2f}%")
 
     def random_unoccupied_cell(self) -> tuple[int, int]:
         coords = np.argwhere(self.grid == EMPTY)
@@ -108,3 +108,40 @@ class World:
         husks = np.count_nonzero(self.grid == HUSK)
         wumpi = np.count_nonzero(self.grid == WUMPUS)
         return heroes, enemies, husks, wumpi
+
+    def move_enemies(self):
+        # Move enemies toward the hero; convert to husk on collision
+        # Refactored from the boilerplate generated via Jetbrains AI
+
+        hero_locs = np.argwhere(self.grid == HERO)
+        if hero_locs.size == 0:
+            return
+
+        hero_y, hero_x = hero_locs[0]  # This implementation assumes at most one hero
+
+        enemy_locs = np.argwhere(self.grid == ENEMY)
+        # There is an inherent order of these calculations, it might be worth to consider randomizing
+        for y, x in enemy_locs:
+            # Calculate the direction and new coordinates
+            dy, dx = np.sign(hero_y - y), np.sign(hero_x - x)
+            new_y, new_x = y + dy, x + dx
+
+            # Check boundaries
+            if not (0 <= new_y < self.grid_size and 0 <= new_x < self.grid_size):
+                continue
+
+            cell = self.grid[new_y, new_x]
+            if cell == HERO:
+                # Convert the hero to a husk, keep attacking enemy alive
+                self.grid[new_y, new_x] = HUSK
+                logger.debug(f"Enemy {x, y} husked the hero {new_x, new_y}")
+            elif cell != EMPTY:
+                # Convert to husk on collision with any other object
+                # If two enemies collide, only the "current" one, which we are calculating for, will get husked
+                # TODO: spawn wumpus on collision of two live enemies
+                self.grid[y, x] = HUSK
+                logger.debug(f"Enemy {x, y} husked itself")
+            elif cell == EMPTY:
+                # Move enemy into an empty cell
+                self.grid[y, x] = EMPTY
+                self.grid[new_y, new_x] = ENEMY

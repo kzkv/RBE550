@@ -15,23 +15,24 @@ GLYPHS = {
     WALL: term.gray50("▒"),
     HERO: term.black_on_gray93("●"),
     ENEMY: term.red1_on_gray93("▲"),
-    HUSK: term.brown(""),
+    HUSK: term.white_on_brown("%"),
     GOAL: term.green("◎"),
     # TODO: teleports @ and wumpus ☺
 }
 
 
 def render_grid(grid: np.ndarray):
-    print(end="\n")
+    print(term.clear)
     H, W = grid.shape
     for y in range(H):
         row = "".join(GLYPHS[int(v)] for v in grid[y])
-        # print(term.on_gray99(row))
         print(row)
-    print(end="\n")
 
 
 def render_stats(counts):
     heroes, enemies, husks, wumpi = counts
-    print(f"HEROES: {heroes:2d}   ENEMIES: {enemies:2d}   HUSKS: {husks:2d}   WUMPI: {wumpi:2d}")
-    print(end="\n" * 2)
+    print(f"\nHEROES: {heroes:2d}   ENEMIES: {enemies:2d}   HUSKS: {husks:2d}   WUMPI: {wumpi:2d}")
+
+
+def render_game_over():
+    print(term.red1_on_black(" YOU DIED "), end="\n" * 2)
