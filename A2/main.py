@@ -15,6 +15,7 @@ from world import World
 import logging
 from render import render_grid, render_stats, render_game_over
 from time import sleep
+from planner import get_heros_journey
 
 TICK_TIME = 0.5
 
@@ -25,15 +26,15 @@ handler = logging.StreamHandler()
 handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 
-world = World(grid_size=64, rho=0.20)
+world = World()
 
 # Init
-render_grid(world.grid)
-sleep(TICK_TIME*5)  # Let the observer situate themselves with the map
+render_grid(world.grid, path=[])
+# sleep(TICK_TIME*5)  # Let the observer situate themselves with the map
 
 # Main game loop
 while True:
-    render_grid(world.grid)
+    render_grid(world.grid, path=get_heros_journey(world))
 
     stats = world.calculate_stats()
     render_stats(stats)

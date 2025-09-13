@@ -12,6 +12,11 @@ logger.setLevel(logging.INFO)
 
 rng = np.random.default_rng()
 
+# Fundamental constants
+GRID_SIZE = 64
+RHO = 0.2
+
+# Tetromino shapes
 canonical_shapes = (
     [[1, 1, 1, 1]],  # straight (or I)
     [[0, 0, 1], [1, 1, 1]],  # L
@@ -31,7 +36,7 @@ GOAL = 5
 WUMPUS = 6
 
 # Starting counts of objects
-ENEMY_COUNT = 0
+ENEMY_COUNT = 10
 
 
 def rotate(shape: np.ndarray):
@@ -46,10 +51,10 @@ class World:
     We are only supporting square grids for now.
     """
 
-    def __init__(self, grid_size: int, rho: float):
-        self.grid_size = grid_size
-        self.rho = rho
-        self.grid = np.zeros((grid_size, grid_size), dtype=int)
+    def __init__(self):
+        self.grid_size = GRID_SIZE
+        self.rho = RHO
+        self.grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=int)
 
         # location of the hero
         self.hero_y, self.hero_x = 0, 0
@@ -63,7 +68,6 @@ class World:
         self.place_obstacles()
         self.place_robots()
         self.place_goal()
-
 
     def place_obstacles(self):
         cell_target = int(self.rho * self.grid_size * self.grid_size)
@@ -137,9 +141,13 @@ class World:
         for y, x in enemy_locs:
             # Calculate the direction and new coordinates
             dy, dx = np.sign(self.hero_y - y), np.sign(self.hero_x - x)
-            new_y, new_x = y + dy, x + dx
-            # TODO:!!! eliminate diagonal movement
-            # consider random vs min dist diagonally
+
+            # Randomly select the axis to move, if both are available.
+            # This proved to be the easiest and cheapest implementation
+            moves = []
+            if dy: moves.append((y + dy, x))
+            if dx: moves.append((y, x + dx))
+            new_y, new_x = rng.choice(moves)
 
             # Check boundaries
             if not (0 <= new_y < self.grid_size and 0 <= new_x < self.grid_size):
