@@ -37,7 +37,7 @@ GRAVE = 6
 WUMPUS = 42
 
 # Starting counts of objects
-ENEMY_COUNT = 30
+ENEMY_COUNT = 10
 
 
 def rotate(shape: np.ndarray):
