@@ -33,10 +33,11 @@ HERO = 2
 ENEMY = 3
 HUSK = 4
 GOAL = 5
-WUMPUS = 6
+GRAVE = 6
+WUMPUS = 42
 
 # Starting counts of objects
-ENEMY_COUNT = 10
+ENEMY_COUNT = 30
 
 
 def rotate(shape: np.ndarray):
@@ -75,9 +76,6 @@ class World:
         cell_coverage = 0
 
         while coverage < self.rho:
-            """
-            Work in batches; each assumes no overlap. This can be further improved by gain modeling and a basic control loop. 
-            """
             # Calculate the batch, place at least one tetromino
             placements_count = max(1, int((cell_target - cell_coverage) / 4))
             logger.debug(f"Batch placements: {placements_count}")
@@ -130,9 +128,8 @@ class World:
 
     def move_enemies(self):
         # Move enemies toward the hero; convert to husk on collision
-        # Refactored from the boilerplate generated via Jetbrains AI
 
-        # TODO: chose where to localize the hero and how to establish they have expired
+        # TODO: choose where to localize the hero and how to establish they have expired
         if not self.hero_alive:
             return
 
@@ -157,9 +154,10 @@ class World:
 
             cell = self.grid[new_y, new_x]
             if cell == HERO:
-                # Convert the hero to a husk, keep attacking enemy alive
-                self.grid[new_y, new_x] = HUSK
-                logger.debug(f"Enemy {x, y} husked the hero {new_x, new_y}")
+                self.hero_alive = False
+                # Convert the hero to a grave, keep attacking enemy alive
+                self.grid[new_y, new_x] = GRAVE
+                logger.debug(f"Enemy {x, y} unalived the hero {new_x, new_y}")
             elif cell != EMPTY:
                 # Convert to husk on collision with any other object
                 # If two enemies collide, only the "current" one, which we are calculating for, will get husked
@@ -170,3 +168,14 @@ class World:
                 # Move enemy into an empty cell
                 self.grid[y, x] = EMPTY
                 self.grid[new_y, new_x] = ENEMY
+
+    def move_hero(self, new_loc):
+        if not self.hero_alive:
+            return
+
+        if new_loc == (self.goal_y, self.goal_x):
+            self.goal_reached = True
+
+        self.grid[self.hero_y, self.hero_x] = EMPTY
+        self.hero_y, self.hero_x = new_loc
+        self.grid[self.hero_y, self.hero_x] = HERO

@@ -5,21 +5,10 @@
 
 import numpy as np
 from blessed import Terminal
-from world import EMPTY, WALL, HERO, ENEMY, HUSK, GOAL
+from world import EMPTY, WALL, HERO, ENEMY, HUSK, GOAL, GRAVE
 from time import sleep
 
 term = Terminal()
-
-# Glyphs (need more dwarfs)
-# GLYPHS = {
-#     EMPTY: term.on_gray93(" "),
-#     WALL: term.on_gray60(" "),
-#     HERO: term.black_on_gray93("●"),
-#     ENEMY: term.red1_on_gray93("▲"),
-#     HUSK: term.white_on_brown("x"),
-#     GOAL: term.white_on_green("◎"),
-#     # TODO: teleports @ and wumpus ☺
-# }
 
 # Glyphs dict (needs more dwarfs); defines overridable attributes separate from the character
 GLYPHS = {
@@ -29,6 +18,7 @@ GLYPHS = {
     ENEMY: (term.red1_on_gray93, "▲"),
     HUSK: (term.white_on_brown, "x"),
     GOAL: (term.white_on_green, "◎"),
+    GRAVE: (term.red1_on_black, "✝"),
 }
 
 
@@ -55,9 +45,5 @@ def render_game_over():
     print(term.red1_on_black("          \n YOU DIED \n          "), end="\n" * 2)
     # TODO: add the Dark Souls sound effect https://www.youtube.com/watch?v=-ZGlaAxB7nI
 
-#
-# def render_path(path):
-#     for p in path:
-#         print(p)
-#         term.move_xy(*p)
-#         sleep(1)
+def render_great_success():
+    print(term.green("\nYOU, IN FACT, DIDN'T DIE. HEART EMOJI!"), end="\n" * 2)

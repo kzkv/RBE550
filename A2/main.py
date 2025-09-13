@@ -10,14 +10,13 @@
 Also simplifies the situation with corner-cutting.
 Might simplify implementation with something like NetworkX (which connects grid cells orthogonally)
 """
-
 from world import World
 import logging
-from render import render_grid, render_stats, render_game_over
+from render import render_grid, render_stats, render_game_over, render_great_success
 from time import sleep
 from planner import get_heros_journey
 
-TICK_TIME = 0.5
+TICK_TIME = 0.25
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -34,14 +33,21 @@ render_grid(world.grid, path=[])
 
 # Main game loop
 while True:
-    render_grid(world.grid, path=get_heros_journey(world))
+    heros_journey = get_heros_journey(world)
+    render_grid(world.grid, path=heros_journey)
 
     stats = world.calculate_stats()
     render_stats(stats)
 
-    if stats[0] == 0:
+    if not world.hero_alive:
         render_game_over()
         break
 
+    if world.goal_reached:
+        render_great_success()
+        break
+
     world.move_enemies()
+    world.move_hero(heros_journey[1])
+
     sleep(TICK_TIME)
