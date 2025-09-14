@@ -37,8 +37,8 @@ GRAVE = 6
 WUMPUS = 42
 
 # Starting counts of objects
-ENEMY_COUNT = 10
-
+ENEMY_COUNT = 30
+TELEPORTS = 5
 
 def rotate(shape: np.ndarray):
     """
@@ -56,6 +56,7 @@ class World:
         self.grid_size = GRID_SIZE
         self.rho = RHO
         self.grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=int)
+        self.teleports = TELEPORTS
 
         # location of the hero
         self.hero_y, self.hero_x = 0, 0
@@ -119,9 +120,12 @@ class World:
         self.goal_y, self.goal_x = self.random_unoccupied_cell()
         self.grid[self.goal_y, self.goal_x] = GOAL
 
+    def count_enemies(self):
+        return np.count_nonzero(self.grid == ENEMY)
+
     def calculate_stats(self):
         heroes = np.count_nonzero(self.grid == HERO)
-        enemies = np.count_nonzero(self.grid == ENEMY)
+        enemies = self.count_enemies()
         husks = np.count_nonzero(self.grid == HUSK)
         wumpi = np.count_nonzero(self.grid == WUMPUS)
         return heroes, enemies, husks, wumpi
@@ -179,3 +183,13 @@ class World:
         self.grid[self.hero_y, self.hero_x] = EMPTY
         self.hero_y, self.hero_x = new_loc
         self.grid[self.hero_y, self.hero_x] = HERO
+
+    def teleport_hero(self):
+        if not self.hero_alive:
+            return
+
+        self.grid[self.hero_y, self.hero_x] = EMPTY
+        self.hero_y, self.hero_x = self.random_unoccupied_cell()
+        self.grid[self.hero_y, self.hero_x] = HERO
+
+        self.teleports -= 1

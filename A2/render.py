@@ -5,8 +5,8 @@
 
 import numpy as np
 from blessed import Terminal
-from world import EMPTY, WALL, HERO, ENEMY, HUSK, GOAL, GRAVE
-from time import sleep
+
+from world import World, EMPTY, WALL, HERO, ENEMY, HUSK, GOAL, GRAVE
 
 term = Terminal()
 
@@ -36,9 +36,9 @@ def render_grid(grid: np.ndarray, path: list):
         print()
 
 
-def render_stats(counts):
-    heroes, enemies, husks, wumpi = counts
-    print(f"\nHEROES: {heroes:2d}   ENEMIES: {enemies:2d}   HUSKS: {husks:2d}   WUMPI: {wumpi:2d}")
+def render_stats(world: World):
+    heroes, enemies, husks, wumpi = world.calculate_stats()
+    print(f"\nHEROES: {heroes:1d}   ENEMIES: {enemies:2d}   HUSKS: {husks:2d}   WUMPI: {wumpi:1d}   TELEPORTS: {world.teleports:1d}")
 
 
 def render_game_over():
@@ -46,4 +46,7 @@ def render_game_over():
     # TODO: add the Dark Souls sound effect https://www.youtube.com/watch?v=-ZGlaAxB7nI
 
 def render_great_success():
-    print(term.green("\nYOU, IN FACT, DIDN'T DIE. HEART EMOJI!"), end="\n" * 2)
+    print(term.green("\nTHE HERO, IN FACT, DIDN'T DIE. HEART EMOJI: <3"), end="\n" * 2)
+
+def render_stalemate():
+    print(term.brown("\nTHE HERO WILL PROBABLY DIE OF STARVATION. SAD TIMES :("), end="\n" * 2)
