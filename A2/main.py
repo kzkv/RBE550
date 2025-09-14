@@ -12,9 +12,11 @@ Might simplify implementation with something like NetworkX (which connects grid 
 """
 from world import World
 import logging
-from render import render_grid, render_stats, render_game_over, render_great_success, render_stalemate
+from render import render_grid, render_stats, render_game_over, render_great_success, render_stalemate, render_stop
 from time import sleep
 from planner import get_heros_journey
+from blessed import Terminal
+term = Terminal()
 
 TICK_TIME = 0.25
 
@@ -28,43 +30,48 @@ logger.addHandler(handler)
 world = World()
 
 # Init
-render_grid(world.grid, path=[])
-# sleep(TICK_TIME*5)  # Let the observer situate themselves with the map
+render_grid(term, world.grid, path=[])
 
-# Main game loop
-while True:
-    heros_journey = get_heros_journey(world)
+with term.cbreak(), term.hidden_cursor():
+    # Main game loop
 
-    render_grid(world.grid, path=heros_journey)
-    render_stats(world)
+    while True:
+        heros_journey = get_heros_journey(world)
 
-    if not heros_journey and world.teleports > 0:
-        world.teleport_hero()
-        # Teleporting takes a tick to execute; this could be implemented differently,
-        # but this way allows for visibility, however limited
+        render_grid(term, world.grid, path=heros_journey)
+        render_stats(world)
 
-        # Another potential application of teleportation mentioned in the assignment is
-        # if the hero is "threatened". On the hundreds of test runs, it's redundant for the
-        # target parameters (10 enemies, 0.2 rho), just planning the exclusion of one-cell
-        # radius is enough. But the way to implement "threat" will be to establish if there
-        # is a realistic intercept by an enemy, i.e. enemy is within 1 cell from the next
-        # few cells of the path.
+        if not heros_journey and world.teleports > 0:
+            world.teleport_hero()
+            # Teleporting takes a tick to execute; this could be implemented differently,
+            # but this way allows for visibility, however limited
 
-    if not heros_journey and world.count_enemies() == 0:
-        # No available moves, but also no enemies left. This is a dead end.
-        render_stalemate()
-        break
+            # Another potential application of teleportation mentioned in the assignment is
+            # if the hero is "threatened". On the hundreds of test runs, it's redundant for the
+            # target parameters (10 enemies, 0.2 rho), just planning the exclusion of one-cell
+            # radius is enough. But the way to implement "threat" will be to establish if there
+            # is a realistic intercept by an enemy, i.e. enemy is within 1 cell from the next
+            # few cells of the path.
 
-    if not world.hero_alive:
-        render_game_over()
-        break
+        if not heros_journey and world.count_enemies() == 0:
+            # No available moves, but also no enemies left. This is a dead end.
+            render_stalemate(term)
+            break
 
-    if world.goal_reached:
-        render_great_success()
-        break
+        if not world.hero_alive:
+            render_game_over(term)
+            break
 
-    world.move_enemies()
-    if len(heros_journey) > 1:
-        world.move_hero(heros_journey[1])
+        if world.goal_reached:
+            render_great_success(term)
+            break
 
-    sleep(TICK_TIME)
+        world.move_enemies()
+        if len(heros_journey) > 1:
+            world.move_hero(heros_journey[1])
+
+        if term.inkey(timeout=TICK_TIME):
+            render_stop(term)
+            break
+
+print(term.normal, end="")

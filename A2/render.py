@@ -5,24 +5,24 @@
 
 import numpy as np
 from blessed import Terminal
-
 from world import World, EMPTY, WALL, HERO, ENEMY, HUSK, GOAL, GRAVE
 
-term = Terminal()
-
 # Glyphs dict (needs more dwarfs); defines overridable attributes separate from the character
-GLYPHS = {
-    EMPTY: (term.on_gray93, " "),
-    WALL: (term.on_gray60, " "),
-    HERO: (term.black_on_gray93, "●"),
-    ENEMY: (term.red1_on_gray93, "▲"),
-    HUSK: (term.white_on_brown, "x"),
-    GOAL: (term.white_on_green, "◎"),
-    GRAVE: (term.red1_on_black, "✝"),
-}
+def get_glyphs(term: Terminal):
+    return {
+        EMPTY: (term.on_gray93, " "),
+        WALL: (term.on_gray60, " "),
+        HERO: (term.black_on_gray93, "●"),
+        ENEMY: (term.red1_on_gray93, "▲"),
+        HUSK: (term.white_on_brown, "x"),
+        GOAL: (term.white_on_green, "◎"),
+        GRAVE: (term.red1_on_black, "✝"),
+    }
 
 
-def render_grid(grid: np.ndarray, path: list):
+def render_grid(term: Terminal, grid: np.ndarray, path: list):
+    GLYPHS = get_glyphs(term)
+
     print(term.clear)
     H, W = grid.shape
     for y in range(H):
@@ -38,15 +38,22 @@ def render_grid(grid: np.ndarray, path: list):
 
 def render_stats(world: World):
     heroes, enemies, husks, wumpi = world.calculate_stats()
-    print(f"\nHEROES: {heroes:1d}   ENEMIES: {enemies:2d}   HUSKS: {husks:2d}   WUMPI: {wumpi:1d}   TELEPORTS: {world.teleports:1d}")
+    print(
+        f"\nHEROES: {heroes:1d}   ENEMIES: {enemies:2d}   HUSKS: {husks:2d}   WUMPI: {wumpi:1d}   TELEPORTS: {world.teleports:1d}")
 
 
-def render_game_over():
+def render_game_over(term: Terminal):
     print(term.red1_on_black("          \n YOU DIED \n          "), end="\n" * 2)
     # TODO: add the Dark Souls sound effect https://www.youtube.com/watch?v=-ZGlaAxB7nI
 
-def render_great_success():
+
+def render_great_success(term: Terminal):
     print(term.green("\nTHE HERO, IN FACT, DIDN'T DIE. HEART EMOJI: <3"), end="\n" * 2)
 
-def render_stalemate():
+
+def render_stalemate(term: Terminal):
     print(term.brown("\nTHE HERO WILL PROBABLY DIE OF STARVATION. SAD TIMES :("), end="\n" * 2)
+
+
+def render_stop(term: Terminal):
+    print(term.brown("\nTHIS IS THE NEW ANY% FLATLAND RECORD"), end="\n" * 2)
