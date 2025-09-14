@@ -201,6 +201,6 @@ class World:
     def tsv_out(self, outcome, file="flatland.tsv"):
         ts = datetime.now().isoformat(timespec="seconds")
         csv.writer(open(file, "a", newline=""), delimiter='\t').writerow(
-            (datetime.now().isoformat(timespec="seconds"), *self.calculate_stats(), self.teleports, outcome)
+            (datetime.now().isoformat(timespec="seconds"), self.rho, *self.calculate_stats(), self.teleports, outcome)
         )
 

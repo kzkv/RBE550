@@ -17,7 +17,7 @@ def get_glyphs(term: Terminal):
         HERO: (term.black_on_gray93, "."),
         ENEMY: (term.red1_on_gray93, "▲"),
         HUSK: (term.white_on_gray25, "_"),
-        GOAL: (term.white_on_green, "▄"),
+        GOAL: (term.white_on_green, "o"),
         GRAVE: (term.red1_on_black, "✝"),
         WUMPUS: (term.gray93_on_gray93, "w"),
     }

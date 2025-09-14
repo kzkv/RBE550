@@ -15,7 +15,7 @@ from blessed import Terminal
 
 term = Terminal()  # For keystroke capture, it's important to have a terminal as a singleton, handed off to rendering.
 
-TICK_TIME = 0.001
+TICK_TIME = 0.25
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
