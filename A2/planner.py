@@ -12,6 +12,7 @@ from world import EMPTY, WALL, HERO, ENEMY, HUSK, GOAL
 from world import World, GRID_SIZE
 
 import logging
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

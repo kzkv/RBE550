@@ -40,6 +40,7 @@ WUMPUS = 42
 ENEMY_COUNT = 50
 TELEPORTS = 0
 
+
 def rotate(shape: np.ndarray):
     """
     Outputs a random rotation of the given shape, -90 to 180 degrees.

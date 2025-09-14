@@ -13,9 +13,9 @@ Might simplify implementation with something like NetworkX (which connects grid 
 from world import World
 import logging
 from render import render_grid, render_stats, render_game_over, render_great_success, render_stalemate, render_stop
-from time import sleep
 from planner import get_heros_journey
 from blessed import Terminal
+
 term = Terminal()
 
 TICK_TIME = 0.25
