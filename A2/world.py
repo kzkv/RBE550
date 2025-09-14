@@ -6,6 +6,8 @@
 
 import numpy as np
 import logging
+import csv
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -124,7 +126,7 @@ class World:
     def count_enemies(self):
         return np.count_nonzero(self.grid == ENEMY)
 
-    def calculate_stats(self):
+    def calculate_stats(self) -> list:
         heroes = np.count_nonzero(self.grid == HERO)
         enemies = self.count_enemies()
         husks = np.count_nonzero(self.grid == HUSK)
@@ -195,3 +197,10 @@ class World:
         self.grid[self.hero_y, self.hero_x] = HERO
 
         self.teleports -= 1
+
+    def tsv_out(self, outcome, file="flatland.tsv"):
+        ts = datetime.now().isoformat(timespec="seconds")
+        csv.writer(open(file, "a", newline=""), delimiter='\t').writerow(
+            (datetime.now().isoformat(timespec="seconds"), *self.calculate_stats(), self.teleports, outcome)
+        )
+

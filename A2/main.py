@@ -2,8 +2,6 @@
 # RBE 550
 # Assignment 2
 # Gen AI usage: ChatGPT to ideate the pseudo-graphics implementation tech stack
-# TODO: address pseudo-graphic rendering pitfalls
-# TODO: reflect in the report one of the principal decisions: allow 4-connected or 8-connected movement.
 """
 4-connected: less elegant movement, but avoids sqrt(2) vs equal-cost movement for diagonal compared to orthogonal.
 Also simplifies the situation with corner-cutting.
@@ -15,9 +13,9 @@ from render import render_grid, render_stats, render_game_over, render_great_suc
 from planner import get_heros_journey
 from blessed import Terminal
 
-term = Terminal()
+term = Terminal()  # For keystroke capture, it's important to have a terminal as a singleton, handed off to rendering.
 
-TICK_TIME = 0.25
+TICK_TIME = 0.001
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +29,7 @@ world = World()
 # Init
 render_grid(term, world.grid, path=[])
 
+outcome = ""
 with term.cbreak(), term.hidden_cursor():
     # Main game loop
 
@@ -54,14 +53,17 @@ with term.cbreak(), term.hidden_cursor():
 
         if not heros_journey and world.count_enemies() == 0:
             # No available moves, but also no enemies left. This is a dead end.
+            outcome = "stalemate"
             render_stalemate(term)
             break
 
         if not world.hero_alive:
+            outcome = "game_over"
             render_game_over(term)
             break
 
         if world.goal_reached:
+            outcome = "great_success"
             render_great_success(term)
             break
 
@@ -70,7 +72,9 @@ with term.cbreak(), term.hidden_cursor():
             world.move_hero(heros_journey[1])
 
         if term.inkey(timeout=TICK_TIME):
+            outcome = "stop"
             render_stop(term)
             break
 
 print(term.normal, end="")
+world.tsv_out(outcome)

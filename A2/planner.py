@@ -16,10 +16,6 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# For enemy reckless path planning, all cells "available"
-# Using global grid size const to instantiate this graph only once
-G_abstract = nx.grid_2d_graph(GRID_SIZE, GRID_SIZE)
-
 
 def graph_from_grid(grid_size, grid: np.ndarray):
     G = nx.grid_2d_graph(grid_size, grid_size)  # 4-connected, square

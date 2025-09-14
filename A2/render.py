@@ -5,7 +5,8 @@
 
 import numpy as np
 from blessed import Terminal
-from world import World, EMPTY, WALL, HERO, ENEMY, HUSK, GOAL, GRAVE
+
+from world import World, EMPTY, WALL, HERO, ENEMY, HUSK, GOAL, GRAVE, WUMPUS
 
 
 # Glyphs dict (needs more dwarfs); defines overridable attributes separate from the character
@@ -18,8 +19,8 @@ def get_glyphs(term: Terminal):
         HUSK: (term.white_on_gray25, "_"),
         GOAL: (term.white_on_green, "▄"),
         GRAVE: (term.red1_on_black, "✝"),
+        WUMPUS: (term.gray93_on_gray93, "w"),
     }
-
 
 def render_grid(term: Terminal, grid: np.ndarray, path: list):
     GLYPHS = get_glyphs(term)
