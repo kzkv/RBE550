@@ -2,8 +2,7 @@
 # RBE 550
 # Assignment 2
 # Gen AI usage: ChatGPT to ideate the pseudo-graphics implementation tech stack
-# TODO: is there a better way to render than squishing the font to 0.7 line height?
-
+# TODO: address pseudo-graphic rendering pitfalls
 # TODO: reflect in the report one of the principal decisions: allow 4-connected or 8-connected movement.
 """
 4-connected: less elegant movement, but avoids sqrt(2) vs equal-cost movement for diagonal compared to orthogonal.

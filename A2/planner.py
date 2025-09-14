@@ -33,7 +33,7 @@ def graph_from_grid(grid_size, grid: np.ndarray):
     mask = np.ones((3, 3), bool)
     enemies = binary_dilation(enemies, structure=mask)  # added 3x3 mask
 
-    avoid = zip(*np.where(impassable + enemies))  # TODO: add exclusion zones around enemies?
+    avoid = zip(*np.where(impassable + enemies))
     G.remove_nodes_from(map(tuple, avoid))
     return G
 
@@ -41,7 +41,10 @@ def graph_from_grid(grid_size, grid: np.ndarray):
 def get_heros_journey(world: World) -> list[tuple[int, int]]:
     G = graph_from_grid(world.grid_size, world.grid)
     try:
-        return nx.astar_path(G, (world.hero_y, world.hero_x), (world.goal_y, world.goal_x))
+        source = (world.hero_y, world.hero_x)
+        target = (world.goal_y, world.goal_x)
+        manhattan_distance = lambda u, v: abs(u[0] - v[0]) + abs(u[1] - v[1])
+        return nx.astar_path(G, source, target, heuristic=manhattan_distance)
     except (NodeNotFound, NetworkXNoPath) as e:
         logger.debug(f"No path found: {e}")
         return []

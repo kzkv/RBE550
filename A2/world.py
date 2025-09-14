@@ -37,8 +37,8 @@ GRAVE = 6
 WUMPUS = 42
 
 # Starting counts of objects
-ENEMY_COUNT = 50
-TELEPORTS = 0
+ENEMY_COUNT = 10
+TELEPORTS = 5
 
 
 def rotate(shape: np.ndarray):
@@ -134,7 +134,6 @@ class World:
     def move_enemies(self):
         # Move enemies toward the hero; convert to husk on collision
 
-        # TODO: choose where to localize the hero and how to establish they have expired
         if not self.hero_alive:
             return
 
@@ -144,8 +143,10 @@ class World:
             # Calculate the direction and new coordinates
             dy, dx = np.sign(self.hero_y - y), np.sign(self.hero_x - x)
 
-            # Randomly select the axis to move, if both are available.
-            # This proved to be the easiest and cheapest implementation
+            # Randomly select the axis to move, if both are available. This proved to be the easiest and cheapest
+            # implementation. A more involved alternative would be to navigate first toward the axis with a higher
+            # delta, but that was too much code to write.
+            # In testing, the random selection approach looks quite natural.
             moves = []
             if dy: moves.append((y + dy, x))
             if dx: moves.append((y, x + dx))
