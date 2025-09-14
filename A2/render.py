@@ -12,10 +12,10 @@ def get_glyphs(term: Terminal):
     return {
         EMPTY: (term.on_gray93, " "),
         WALL: (term.on_gray60, " "),
-        HERO: (term.black_on_gray93, "●"),
+        HERO: (term.black_on_gray93, "."),
         ENEMY: (term.red1_on_gray93, "▲"),
-        HUSK: (term.white_on_brown, "x"),
-        GOAL: (term.white_on_green, "◎"),
+        HUSK: (term.white_on_brown, "_"),
+        GOAL: (term.white_on_green, "▄"),
         GRAVE: (term.red1_on_black, "✝"),
     }
 
@@ -43,7 +43,7 @@ def render_stats(world: World):
 
 
 def render_game_over(term: Terminal):
-    print(term.red1_on_black("          \n YOU DIED \n          "), end="\n" * 2)
+    print(term.red1_on_black("          \n YOU DIED "), end="\n" * 2)
     # TODO: add the Dark Souls sound effect https://www.youtube.com/watch?v=-ZGlaAxB7nI
 
 
@@ -56,4 +56,4 @@ def render_stalemate(term: Terminal):
 
 
 def render_stop(term: Terminal):
-    print(term.brown("\nTHIS IS THE NEW ANY% FLATLAND RECORD"), end="\n" * 2)
+    print(term.brown("\nTHIS COULD HAVE BEEN A NEW ANY% RECORD"), end="\n" * 2)
