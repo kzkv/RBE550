@@ -12,7 +12,7 @@ rng = np.random.default_rng()
 # Fundamental constants
 GRID_DIMENSIONS = 12
 CELL_SIZE = 3  # 3 meters per cell
-PIXELS_PER_METER = 20
+PIXELS_PER_METER = 40
 
 CELL_BG_COLOR = (255, 255, 255)
 CELL_GRID_COLOR = (230, 230, 230)
@@ -63,7 +63,7 @@ class World:
         self.pixels_per_meter = PIXELS_PER_METER
         self.cell_dimensions = CELL_SIZE * self.pixels_per_meter
         self.field_dimensions = self.grid_dimensions * self.cell_dimensions
-        self.font = pygame.font.SysFont("monospace", self.cell_dimensions // 2)
+        self.font = pygame.font.SysFont("monospace", 20, bold=True)
         self.hud_padding = 10
         self.hud_height = self.font.get_height() + self.hud_padding * 2
 
