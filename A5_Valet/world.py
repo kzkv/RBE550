@@ -17,6 +17,8 @@ PIXELS_PER_METER = 20
 CELL_BG_COLOR = (255, 255, 255)
 CELL_GRID_COLOR = (230, 230, 230)
 OBSTACLE_BG_COLOR = (100, 100, 100)
+HUD_BG_COLOR = (0, 0, 0)
+HUD_FONT_COLOR = (200, 200, 200)
 
 # There is no reason to produce a randomized field to only persist it later.
 # Working with preset fields for this assignment.
@@ -50,19 +52,25 @@ def world_to_grid(x, y):
     return row, col
 
 
+def pixel_to_world(px, py):
+    """Mouse pixel -> world coordinates (in meters)"""
+    return px / PIXELS_PER_METER, py / PIXELS_PER_METER
+
+
 class World:
     def __init__(self):
         self.grid_dimensions = GRID_DIMENSIONS
         self.pixels_per_meter = PIXELS_PER_METER
         self.cell_dimensions = CELL_SIZE * self.pixels_per_meter
         self.field_dimensions = self.grid_dimensions * self.cell_dimensions
-        self.margin = self.cell_dimensions
+        self.font = pygame.font.SysFont("monospace", self.cell_dimensions // 2)
+        self.hud_padding = 10
+        self.hud_height = self.font.get_height() + self.hud_padding * 2
 
         self.obstacles = PARKING_LOT
 
-        self.screen = pygame.display.set_mode((self.field_dimensions, self.field_dimensions))
+        self.screen = pygame.display.set_mode((self.field_dimensions, self.field_dimensions + self.hud_height))
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont(None, self.cell_dimensions - 4)
 
     def clear(self):
         self.screen.fill(CELL_BG_COLOR)
@@ -85,3 +93,19 @@ class World:
                 if self.obstacles[y, x]:
                     r = pygame.Rect(x * s, y * s, s, s)
                     pygame.draw.rect(self.screen, OBSTACLE_BG_COLOR, r)
+
+    def render_hud(self):
+        mx, my = pygame.mouse.get_pos()
+        x, y = pixel_to_world(mx, my)
+        row, col = world_to_grid(x, y)
+
+        in_bounds = (0 <= row < self.grid_dimensions and 0 <= col < self.grid_dimensions)
+
+        hud_rect = pygame.Rect(0, self.field_dimensions, self.field_dimensions, self.hud_height)
+        pygame.draw.rect(self.screen, HUD_BG_COLOR, hud_rect)
+
+        # assumes the cursor is always within bounds
+        text = f"Row: {row:02d}   Col: {col:02d}   X: {x:04.1f}   Y: {y:04.1f}"
+        img = self.font.render(text, True, HUD_FONT_COLOR)
+        if in_bounds:
+            self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))

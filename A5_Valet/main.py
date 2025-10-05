@@ -26,6 +26,7 @@ while running:
     world.clear()
     world.render_grid()
     world.render_obstacles()
+    world.render_hud()
 
     pygame.display.flip()
     world.clock.tick(60)
