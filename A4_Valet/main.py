@@ -16,7 +16,7 @@ pygame.display.set_caption("Valet")
 world = World()
 
 ROBOT = VehicleSpec(
-    length=0.7, width=0.57, wheelbase=None, cargo_manifest="Burrito"
+    length=0.7, width=0.57, wheelbase=None, cargo_manifest="Burrito", cruising_velocity=1.0, track_width=0.57
 )
 robot = Vehicle(ROBOT, origin=(5.0, 5.0), heading=0.0)
 robot.velocity = 1.0
