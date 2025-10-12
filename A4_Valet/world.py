@@ -1,6 +1,6 @@
 # Tom Kazakov
 # RBE 550
-# Assignment 5, Valet
+# Assignment 4, Valet
 # Obstacle generator: parametric generation for the grid of specified size filling with tetrominoes
 # Refactor/partial reuse of the A2 code as well as our Firebot course project code
 

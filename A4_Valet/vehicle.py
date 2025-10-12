@@ -1,6 +1,6 @@
 # Tom Kazakov
 # RBE 550
-# Assignment 5, Valet
+# Assignment 4, Valet
 # Gen AI usage: ChatGPT for ideation
 
 from dataclasses import dataclass
@@ -28,7 +28,7 @@ class Vehicle:
         self.spec = spec
         self.x = 5.0  # m
         self.y = 5.0  # m
-        self.theta = 0.0  # rad
+        self.theta = 1.2  # rad
 
     def render(self, world: World):
         ppm = world.pixels_per_meter

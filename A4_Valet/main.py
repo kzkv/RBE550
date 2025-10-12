@@ -1,12 +1,12 @@
 # Tom Kazakov
 # RBE 550
-# Assignment 5, Valet
+# Assignment 4, Valet
 # Gen AI usage: ChatGPT for project planning and ideation + some draft code gen
 
 import pygame
 import numpy as np
 
-from A5_Valet.vehicle import VehicleSpec, Vehicle
+from A4_Valet.vehicle import VehicleSpec, Vehicle
 from world import World
 
 rng = np.random.default_rng()
