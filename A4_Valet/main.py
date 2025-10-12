@@ -18,16 +18,34 @@ world = World()
 ROBOT = VehicleSpec(
     length=0.7, width=0.57, wheelbase=None, cargo_manifest="Burrito"
 )
-robot = Vehicle(ROBOT, )
+robot = Vehicle(ROBOT, origin=(5.0, 5.0), heading=0.0)
+robot.velocity = 1.0
+
+# Scripted world-coordinate waypoints (meters)
+waypoints = [
+    (2.0, 2.0),
+    (8.0, 2.0),
+    (8.0, 6.0),
+    (3.5, 6.0),
+]
+
+robot.set_destination(waypoints.pop(0))
 
 running = True
 while running:
+    delta_time = world.clock.get_time() / 1000.0  # seconds
+
     for e in pygame.event.get():
         if e.type == pygame.QUIT:
             running = False
         else:
             pass  # TODO handle events
             # world.handle_event(e)
+
+    robot.drive(delta_time)
+
+    if robot.are_we_there_yet() and waypoints:
+        robot.set_destination(waypoints.pop(0))
 
     world.clear()
     world.render_grid()
