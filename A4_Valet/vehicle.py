@@ -13,6 +13,8 @@ from world import grid_to_world, world_to_grid, World
 
 VEHICLE_BG_COLOR = (56, 67, 205)
 VEHICLE_FRONT_STRIPE_COLOR = (255, 255, 255, 180)
+DESTINATION_COLOR = (0, 255, 0)
+BREADCRUMB_COLOR = (255, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,9 @@ class Vehicle:
         # Prescribed linear and angular velocities
         self._v = 0.0
         self._w = 0.0
+
+        # Persistent breadcrumbs trail; stored in pixels to avoid recalculation in render
+        self.breadcrumbs: List[Tuple[int, int]] = []
 
     def set_destination(self, destination: Tuple[float, float]):
         self._destination = destination
@@ -81,7 +86,7 @@ class Vehicle:
                                                                                                 math.cos(heading_err))
         self._w = k_w * heading_err
 
-    def drive(self, delta_time: float):
+    def drive(self, delta_time: float, world: World):
         if self._destination is not None:
             if self.are_we_there_yet():
                 self._destination = None
@@ -103,6 +108,11 @@ class Vehicle:
             self.x += (v / w) * (math.sin(th_new) - math.sin(th))
             self.y += (v / w) * (-math.cos(th_new) + math.cos(th))
             self.heading = th_new
+
+        # Breadcrumbs update
+        ppm = world.pixels_per_meter
+        px, py = int(self.x * ppm), int(self.y * ppm)
+        self.breadcrumbs.append((px, py))
 
     def render(self, world: World):
         ppm = world.pixels_per_meter
@@ -132,6 +142,9 @@ class Vehicle:
         if self._destination is not None:
             tx, ty = self._destination
             tpx, tpy = int(tx * ppm), int(ty * ppm)  # in pixels
-            pygame.draw.circle(world.screen, (0, 255, 0), (tpx, tpy), 5)
-            pygame.draw.line(world.screen, (0, 255, 0), (px, py), (tpx, tpy), 2)
-            # TODO: extract cosmetics to constants
+            pygame.draw.circle(world.screen, DESTINATION_COLOR, (tpx, tpy), 3)
+            pygame.draw.line(world.screen, DESTINATION_COLOR, (px, py), (tpx, tpy), 1)
+
+    def render_breadcrumbs(self, world: World):
+        for px, py in self.breadcrumbs:
+            pygame.draw.circle(world.screen, BREADCRUMB_COLOR, (px, py), 1)

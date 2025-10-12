@@ -42,7 +42,7 @@ while running:
             pass  # TODO handle events
             # world.handle_event(e)
 
-    robot.drive(delta_time)
+    robot.drive(delta_time, world)
 
     if robot.are_we_there_yet() and waypoints:
         robot.set_destination(waypoints.pop(0))
@@ -53,6 +53,7 @@ while running:
     world.render_hud()
 
     robot.render(world)
+    robot.render_breadcrumbs(world)
 
     pygame.display.flip()
     world.clock.tick(60)
