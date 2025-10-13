@@ -5,6 +5,7 @@
 
 import pygame
 import numpy as np
+import math
 
 from A4_Valet.vehicle import VehicleSpec, Vehicle
 from world import World
@@ -16,18 +17,23 @@ pygame.display.set_caption("Valet")
 world = World()
 
 ROBOT = VehicleSpec(
-    length=0.7, width=0.57, wheelbase=None, cargo_manifest="Burrito", cruising_velocity=1.0, track_width=0.57
+    length=0.7, width=0.57, wheelbase=None, cargo_manifest="Burrito", cruising_velocity=2.0, track_width=0.57
 )
-robot = Vehicle(ROBOT, origin=(5.0, 5.0), heading=0.0)
+ORIGIN = (1.5, 1.5)
+robot = Vehicle(ROBOT, origin=ORIGIN, heading=math.pi/2)
 robot.velocity = 1.0
 
 # Scripted world-coordinate waypoints (meters)
 waypoints = [
-    (2.0, 2.0),
-    (8.0, 2.0),
-    (8.0, 6.0),
-    (3.5, 6.0),
+    (7.0, 2.0),
+    (7.0, 13.0),
+    (16.0, 13.0),
+    (16.0, 24.0),
+    (27.7, 34.5),
+    (28.7, 34.5)
 ]
+
+route = [ORIGIN] + waypoints
 
 robot.set_destination(waypoints.pop(0))
 
@@ -50,6 +56,7 @@ while running:
     world.clear()
     world.render_grid()
     world.render_obstacles()
+    world.render_route(route)
     world.render_hud()
 
     robot.render(world)

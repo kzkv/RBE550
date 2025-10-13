@@ -109,3 +109,7 @@ class World:
         img = self.font.render(text, True, HUD_FONT_COLOR)
         if in_bounds:
             self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
+
+    def render_route(self, route):
+        pts = [(int(x * PIXELS_PER_METER), int(y * PIXELS_PER_METER)) for (x, y) in route]
+        pygame.draw.lines(self.screen, (90, 200, 90), False, pts, 2)
