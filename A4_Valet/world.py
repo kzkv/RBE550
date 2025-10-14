@@ -94,7 +94,7 @@ class World:
                     r = pygame.Rect(x * s, y * s, s, s)
                     pygame.draw.rect(self.screen, OBSTACLE_BG_COLOR, r)
 
-    def render_hud(self):
+    def render_hud(self, vehicle_location):
         mx, my = pygame.mouse.get_pos()
         x, y = pixel_to_world(mx, my)
         row, col = world_to_grid(x, y)
@@ -105,7 +105,9 @@ class World:
         pygame.draw.rect(self.screen, HUD_BG_COLOR, hud_rect)
 
         # assumes the cursor is always within bounds
-        text = f"Row: {row:02d}   Col: {col:02d}   X: {x:04.1f}   Y: {y:04.1f}"
+        cursor_location_string = f"{x:04.1f}, {y:04.1f} (row/col {row:02d}, {col:02d})"
+        vehicle_location_string = f"{vehicle_location[0]:04.1f}, {vehicle_location[1]:04.1f}"
+        text = f"Cursor: {cursor_location_string}   Vehicle: {vehicle_location_string}"
         img = self.font.render(text, True, HUD_FONT_COLOR)
         if in_bounds:
             self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
