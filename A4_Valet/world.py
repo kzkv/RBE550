@@ -3,6 +3,7 @@
 # Assignment 4, Valet
 # Obstacle generator: parametric generation for the grid of specified size filling with tetrominoes
 # Refactor/partial reuse of the A2 code as well as our Firebot course project code
+from dataclasses import dataclass
 
 import numpy as np
 import pygame
@@ -26,16 +27,23 @@ PARKING_LOT = np.array([  # the one from the assignment
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0],
     [1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0],
-    [0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0],
+    [0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0],
     [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0],
+    [0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1],
 ], dtype=bool)
+
+
+@dataclass
+class Pos:
+    x: float  # m
+    y: float  # m
+    heading: float  # rad, 0 is along x-axis, CCW is positive
 
 
 def grid_to_world(row, col):

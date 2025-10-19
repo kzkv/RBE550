@@ -78,8 +78,10 @@ class PathFollower:
         x1, y1 = self.route[i]
 
         # How far along the segment we are?
+        if segment - segment_prev == 0:  # work with a corner case of a zero-length segment
+            return x0, y0  # TODO: figure out why my planner is supplying zero-length segments
+
         segment_fraction = (arclength - segment_prev) / (segment - segment_prev)
-        # TODO: consider overlapping waypoints to avoid div by zero
         return x0 + segment_fraction * (x1 - x0), y0 + segment_fraction * (y1 - y0)
 
     def update(self, delta_time: float):
@@ -94,18 +96,20 @@ class PathFollower:
         tx, ty = self._interpolate_at(target_s)
 
         # Distance to lookahead
-        dx, dy = tx - self.vehicle.x, ty - self.vehicle.y
+        dx, dy = tx - self.vehicle.pos.x, ty - self.vehicle.pos.y
 
         # Transform into vehicle frame
-        cos_t, sin_t = math.cos(self.vehicle.heading), math.sin(self.vehicle.heading)
+        cos_t, sin_t = math.cos(self.vehicle.pos.heading), math.sin(self.vehicle.pos.heading)
         x_frame = cos_t * dx + sin_t * dy
         y_frame = -sin_t * dx + cos_t * dy
         # TODO: consider if the target is behind the vehicle
 
         # Pure Pursuit steering law (κ = 2*y_frame / d^2; thanks, ChatGPT)
         d_squared = x_frame * x_frame + y_frame * y_frame
-        kappa = 2 * y_frame / d_squared  # turn sharpness
-        # TODO: consider the target being very close to the vehicle (d_squared about 0 will cause a div by zero error)
+        if d_squared == 0:
+            kappa = 0  # avoid div by zero  TODO: why does this happen? probably zero-length segments
+        else:
+            kappa = 2 * y_frame / d_squared  # turn sharpness
 
         # Clamp velocity: keep cruise unless curvature forces a limit
         # TODO: consider clamping centripetal acceleration too? IRL this can cause rolling over on uneven pavement
@@ -122,7 +126,7 @@ class PathFollower:
         # TODO: consider checking each wheels individually to avoid any corner cases
 
         # Are we there yet?
-        left_to_go = self.distance_between((self.vehicle.x, self.vehicle.y), self.destination)
+        left_to_go = self.distance_between((self.vehicle.pos.x, self.vehicle.pos.y), self.destination)
         if left_to_go <= BRAKING_DISTANCE:
             scale = max(0.0, left_to_go / BRAKING_DISTANCE)
             v *= scale

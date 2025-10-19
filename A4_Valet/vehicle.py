@@ -9,7 +9,7 @@ import math
 import pygame
 
 # Reuse helpers from your world module
-from world import grid_to_world, world_to_grid, World
+from world import World, Pos
 
 VEHICLE_BG_COLOR = (56, 67, 205)
 VEHICLE_FRONT_STRIPE_COLOR = (255, 255, 255, 180)
@@ -30,10 +30,9 @@ class VehicleSpec:
 
 
 class Vehicle:
-    def __init__(self, spec: VehicleSpec, origin: Tuple[float, float] = (0.0, 0.0), heading: float = 0):
+    def __init__(self, spec: VehicleSpec, origin: Pos):
         self.spec = spec
-        self.x, self.y = origin  # m
-        self.heading = heading  # rad, 0 is along x-axis, CCW is positive
+        self.pos = origin
 
         self._destination: Optional[Tuple[float, float]] = None
 
@@ -56,22 +55,22 @@ class Vehicle:
     def drive(self, delta_time: float, world: World):
         """Body commands (v, w) integrator"""
         v, w = self._v, self._w
-        th = self.heading
+        th = self.pos.heading
 
         if abs(w) < 1e-8:  # moving in a straight line
-            self.x += v * math.cos(th) * delta_time
-            self.y += v * math.sin(th) * delta_time
+            self.pos.x += v * math.cos(th) * delta_time
+            self.pos.y += v * math.sin(th) * delta_time
         else:  # unicycle update for constant v, w over delta_time
             th_new = th + w * delta_time
-            self.x += (v / w) * (math.sin(th_new) - math.sin(th))
-            self.y += (v / w) * (-math.cos(th_new) + math.cos(th))
-            self.heading = th_new
+            self.pos.x += (v / w) * (math.sin(th_new) - math.sin(th))
+            self.pos.y += (v / w) * (-math.cos(th_new) + math.cos(th))
+            self.pos.heading = th_new
 
-        self.heading = self._wrap_angle(self.heading)  # Keep heading in [-pi, pi]
+        self.pos.heading = self._wrap_angle(self.pos.heading)  # Keep heading in [-pi, pi]
 
         # Breadcrumbs update
         ppm = world.pixels_per_meter
-        px, py = int(self.x * ppm), int(self.y * ppm)
+        px, py = int(self.pos.x * ppm), int(self.pos.y * ppm)
         self.breadcrumbs.append(((px, py), self._v))
 
     def render(self, world: World):
@@ -92,10 +91,10 @@ class Vehicle:
         pygame.draw.rect(surf, self.spec.front_stripe_color, (stripe_x, 4, stripe_w, Wpx - 8), border_radius=2)
 
         # rotate to the current heading
-        rotated = pygame.transform.rotate(surf, -math.degrees(self.heading))
+        rotated = pygame.transform.rotate(surf, -math.degrees(self.pos.heading))
 
-        px = int(self.x * ppm)
-        py = int(self.y * ppm)
+        px = int(self.pos.x * ppm)
+        py = int(self.pos.y * ppm)
         rect = rotated.get_rect(center=(px, py))
         world.screen.blit(rotated, rect.topleft)
 

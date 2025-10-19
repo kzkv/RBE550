@@ -9,7 +9,8 @@ import math
 
 from follower import PathFollower
 from vehicle import VehicleSpec, Vehicle
-from world import World
+from world import World, Pos
+from planner import plan
 
 rng = np.random.default_rng()
 pygame.init()
@@ -25,20 +26,18 @@ ROBOT = VehicleSpec(
     cruising_velocity=2.0,
     track_width=0.57  # Assumed the same as the vehicle
 )
-ORIGIN = (1.5, 1.5)
-vehicle = Vehicle(ROBOT, origin=ORIGIN, heading=math.pi / 2)
 
-# Scripted world-coordinate waypoints  TODO: replace with an output of the path planner
-waypoints = [
-    (7.0, 1.0),
-    # (7.3, 2.3),
-    (7.0, 13.0),
-    (16.0, 13.0),
-    (16.0, 24.0),
-    (27.7, 34.5),
-    (28.7, 34.5)
-]
-full_route = [ORIGIN] + waypoints
+ORIGIN = Pos(x=1.5, y=1.5, heading=math.pi / 2)
+DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)
+
+vehicle = Vehicle(ROBOT, origin=ORIGIN)
+
+route = plan(ORIGIN, DESTINATION, world.obstacles)
+if route is None:  # TODO: process planner failure more gracefully
+    print("No path found")
+    route = [ORIGIN]  # fall back
+
+full_route = route
 
 follower = PathFollower(
     full_route,
@@ -47,6 +46,8 @@ follower = PathFollower(
     w_max=math.pi / 2,
     vehicle=vehicle
 )
+
+# TODO: investigate a sus movement at the start of the route
 
 running = True
 while running:
@@ -66,7 +67,7 @@ while running:
     world.render_grid()
     world.render_obstacles()
     world.render_route(full_route)
-    world.render_hud((vehicle.x, vehicle.y))
+    world.render_hud((vehicle.pos.x, vehicle.pos.y))
 
     vehicle.render(world)
     vehicle.render_breadcrumbs(world)
