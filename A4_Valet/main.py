@@ -45,6 +45,7 @@ follower = PathFollower(
     lookahead=1.0,
     v_cruise=3.0,
     w_max=math.pi / 2,
+    vehicle=vehicle
 )
 
 running = True
@@ -58,7 +59,7 @@ while running:
             pass  # TODO handle events
             # world.handle_event(e)
 
-    follower.update(vehicle, delta_time)
+    follower.update(delta_time)
     vehicle.drive(delta_time, world)
 
     world.clear()

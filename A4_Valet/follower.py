@@ -25,12 +25,17 @@ class PathFollower:
             lookahead: float,
             v_cruise: float,
             w_max: float,
+            vehicle: Vehicle,
     ):
         # TODO: this relies on at least two waypoints. Write some units and isolate
         self.route = route
         self.lookahead = lookahead
         self.v_cruise = v_cruise
         self.w_max = w_max  # rad/s cap
+
+        # clamping individual wheel rotation to avoid a physically impossible motion
+        # TODO: consider moving the coefficient into a constant
+        self.wheel_speed_max = self.v_cruise * 1.5
 
         # Precompute cumulative arc lengths (segments) for easy interpolation
         self.cumulative_arc_lengths = [0.0]
@@ -47,6 +52,9 @@ class PathFollower:
 
         self.destination = (self.route[-1][0], self.route[-1][1])
         # TODO: consider specifying heading for the last pos
+
+        self.vehicle = vehicle
+        # TODO: all of this would, ideally, be unit-tested to avoid corner cases with zero-inputs or too-large inputs
 
     @staticmethod
     def distance_between(origin: Tuple[float, float], destination: Tuple[float, float]) -> float:
@@ -70,10 +78,11 @@ class PathFollower:
         x1, y1 = self.route[i]
 
         # How far along the segment we are?
-        segment_fraction = (arclength - segment_prev) / (segment - segment_prev)  # TODO: consider overlapping waypoints
+        segment_fraction = (arclength - segment_prev) / (segment - segment_prev)
+        # TODO: consider overlapping waypoints to avoid div by zero
         return x0 + segment_fraction * (x1 - x0), y0 + segment_fraction * (y1 - y0)
 
-    def update(self, vehicle: Vehicle, delta_time: float):
+    def update(self, delta_time: float):
         """Compute (v, w) and command the vehicle"""
         # TODO: take into account track width
 
@@ -85,27 +94,35 @@ class PathFollower:
         tx, ty = self._interpolate_at(target_s)
 
         # Distance to lookahead
-        dx, dy = tx - vehicle.x, ty - vehicle.y
+        dx, dy = tx - self.vehicle.x, ty - self.vehicle.y
 
         # Transform into vehicle frame
-        cos_t, sin_t = math.cos(vehicle.heading), math.sin(vehicle.heading)
+        cos_t, sin_t = math.cos(self.vehicle.heading), math.sin(self.vehicle.heading)
         x_frame = cos_t * dx + sin_t * dy
         y_frame = -sin_t * dx + cos_t * dy
+        # TODO: consider if the target is behind the vehicle
 
         # Pure Pursuit steering law (κ = 2*y_frame / d^2; thanks, ChatGPT)
         d_squared = x_frame * x_frame + y_frame * y_frame
         kappa = 2 * y_frame / d_squared  # turn sharpness
-        # TODO: consider the target being very close to the vehicle
+        # TODO: consider the target being very close to the vehicle (d_squared about 0 will cause a div by zero error)
 
         # Clamp velocity: keep cruise unless curvature forces a limit
-        # TODO: consider clamping centripetal acceleration too?
+        # TODO: consider clamping centripetal acceleration too? IRL this can cause rolling over on uneven pavement
         v_limit_turn = self.w_max / max(1e-6, abs(kappa))
         v = min(self.v_cruise, v_limit_turn)
 
         w = v * kappa
 
+        # clamp rotation based on the individual wheel speed
+        # |w| <= 2/track_width * (wheel_speed_max - |v|); thanks again, ChatGPT
+        w_cap = (2.0 / self.vehicle.spec.track_width) * max(0.0, self.wheel_speed_max - abs(v))
+        if abs(w) > w_cap:
+            w = math.copysign(w_cap, w)  # keep the sign, but clamp
+        # TODO: consider checking each wheels individually to avoid any corner cases
+
         # Are we there yet?
-        left_to_go = self.distance_between((vehicle.x, vehicle.y), self.destination)
+        left_to_go = self.distance_between((self.vehicle.x, self.vehicle.y), self.destination)
         if left_to_go <= BRAKING_DISTANCE:
             scale = max(0.0, left_to_go / BRAKING_DISTANCE)
             v *= scale
@@ -114,5 +131,6 @@ class PathFollower:
             self.we_are_there = True
             v, w = 0.0, 0.0
 
-        vehicle.set_velocities(v, w)
+        # TODO: the follower never commands going in reverse, but it could be useful
+        self.vehicle.set_velocities(v, w)
         self._v_last = v
