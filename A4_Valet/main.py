@@ -38,14 +38,7 @@ vehicle = Vehicle(ROBOT, origin=ORIGIN)
 route = plan(ORIGIN, DESTINATION, world.obstacles, vehicle_width=vehicle.spec.width)
 if route is None:
     print("NO PATH FOUND!")
-    route = [(ORIGIN.x, ORIGIN.y)]  # Fallback as tuple, not Pos
-else:
-    # DEBUG: Check if route actually starts at origin
-    print(f"\nRoute Verification")
-    print(f"  Route first 3 points: {route[:3]}")
-    print(f"  Expected start: ({ORIGIN.x}, {ORIGIN.y})")
-    start_error = math.hypot(route[0][0] - ORIGIN.x, route[0][1] - ORIGIN.y)
-    print(f"  Start position error: {start_error:.3f}m")
+    route = [(ORIGIN.x, ORIGIN.y)]
 
 full_route = route
 
@@ -66,12 +59,6 @@ pygame.display.flip()
 
 # Initialize the clock properly - this starts the timing
 world.clock.tick(0)
-
-print(f"\nInitial State")
-print(f"  Vehicle at: ({vehicle.pos.x:.2f}, {vehicle.pos.y:.2f}, {vehicle.pos.heading:.3f})")
-print(f"  Route first point: {full_route[0]}")
-print(f"  Route has {len(full_route)} points")
-print(f"  Follower initialized with traveled={follower.traveled:.2f}m")
 
 # Reset clock right before loop to avoid large first delta_time
 world.clock.tick()

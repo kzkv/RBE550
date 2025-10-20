@@ -269,7 +269,6 @@ def plan(
             path = reconstruct_path(current)
 
             print(f"  Reconstructed {len(path)} waypoints")
-            print(f"  Path: ({path[0][0]:.1f}, {path[0][1]:.1f}) → ({path[-1][0]:.1f}, {path[-1][1]:.1f})")
 
             if path and math.hypot(path[-1][0] - goal.x, path[-1][1] - goal.y) > 0.1:
                 path.append((goal.x, goal.y))
@@ -300,7 +299,7 @@ def plan(
             heapq.heappush(open_set, neighbor)
 
         if nodes_expanded % PROGRESS_INTERVAL == 0:
-            print(f"  {nodes_expanded} nodes, err: {dist_to_goal:.1f}m / {math.degrees(heading_error):.0f}°")
+            print(f"  {nodes_expanded} nodes expanded")
 
     print(f"NO PATH FOUND after {nodes_expanded} nodes")
     return None

@@ -41,12 +41,6 @@ class PathFollower:
         # Start at the beginning - vehicle is placed at route start
         self.traveled = 0.0
 
-        print(f"\n PathFollower initialized:")
-        print(f"  Vehicle at: ({vehicle.pos.x:.2f}, {vehicle.pos.y:.2f})")
-        print(f"  Path starts at: {route[0]}")
-        print(f"  Initial 'traveled' distance: {self.traveled:.3f}m")
-        print(f"  Total path length: {self.total_arc_length:.1f}m")
-
         self.we_are_there = False
         self._v_last = 0.0
 
