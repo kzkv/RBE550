@@ -35,7 +35,7 @@ DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)
 
 vehicle = Vehicle(ROBOT, origin=ORIGIN)
 
-route = plan(ORIGIN, DESTINATION, world.obstacles)
+route = plan(ORIGIN, DESTINATION, world.obstacles, vehicle_width=vehicle.spec.width)
 if route is None:
     print("NO PATH FOUND!")
     route = [(ORIGIN.x, ORIGIN.y)]  # Fallback as tuple, not Pos
