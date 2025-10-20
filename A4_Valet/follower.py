@@ -21,40 +21,36 @@ POS_ERROR_THRESHOLD = 0.1
 class PathFollower:
     def __init__(
             self,
-            route: List[Tuple[float, float]],
+            route: List[Tuple[float, float]],  # TODO: refactor into a list of Pos
             lookahead: float,
-            v_cruise: float,
-            w_max: float,
             vehicle: Vehicle,
     ):
-        # TODO: this relies on at least two waypoints. Write some units and isolate
+        self.vehicle = vehicle
         self.route = route
         self.lookahead = lookahead
-        self.v_cruise = v_cruise
-        self.w_max = w_max  # rad/s cap
+        self.wheel_speed_max = self.vehicle.spec.cruising_velocity * 1.5
 
-        # clamping individual wheel rotation to avoid a physically impossible motion
-        # TODO: consider moving the coefficient into a constant
-        self.wheel_speed_max = self.v_cruise * 1.5
-
-        # Precompute cumulative arc lengths (segments) for easy interpolation
+        # Precompute cumulative arc lengths
         self.cumulative_arc_lengths = [0.0]
         for i in range(1, len(route)):
             self.cumulative_arc_lengths.append(
                 self.cumulative_arc_lengths[-1] + self.distance_between(route[i - 1], route[i])
             )
         self.total_arc_length = self.cumulative_arc_lengths[-1]
-        self.traveled = 0.0  # Distance traveled along the concatenated route (m)
-        self.we_are_there = False
 
-        # Keep the last v to integrate progress smoothly
+        # Start at the beginning - vehicle is placed at route start
+        self.traveled = 0.0
+
+        print(f"\n PathFollower initialized:")
+        print(f"  Vehicle at: ({vehicle.pos.x:.2f}, {vehicle.pos.y:.2f})")
+        print(f"  Path starts at: {route[0]}")
+        print(f"  Initial 'traveled' distance: {self.traveled:.3f}m")
+        print(f"  Total path length: {self.total_arc_length:.1f}m")
+
+        self.we_are_there = False
         self._v_last = 0.0
 
         self.destination = (self.route[-1][0], self.route[-1][1])
-        # TODO: consider specifying heading for the last pos
-
-        self.vehicle = vehicle
-        # TODO: all of this would, ideally, be unit-tested to avoid corner cases with zero-inputs or too-large inputs
 
     @staticmethod
     def distance_between(origin: Tuple[float, float], destination: Tuple[float, float]) -> float:
@@ -113,8 +109,8 @@ class PathFollower:
 
         # Clamp velocity: keep cruise unless curvature forces a limit
         # TODO: consider clamping centripetal acceleration too? IRL this can cause rolling over on uneven pavement
-        v_limit_turn = self.w_max / max(1e-6, abs(kappa))
-        v = min(self.v_cruise, v_limit_turn)
+        v_limit_turn = self.vehicle.spec.w_max / max(1e-6, abs(kappa))
+        v = min(self.vehicle.spec.cruising_velocity, v_limit_turn)
 
         w = v * kappa
 

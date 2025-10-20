@@ -21,7 +21,8 @@ OBSTACLE_BG_COLOR = (100, 100, 100)
 HUD_BG_COLOR = (0, 0, 0)
 HUD_FONT_COLOR = (200, 200, 200)
 
-# There is no reason to produce a randomized field to only persist it later.
+# I started with a randomized field, but it was not presenting a consistent and interesting challenge
+# Also, there was no reason to produce a randomized field to then persist it to eliminate run-to-run variation.
 # Working with preset fields for this assignment.
 PARKING_LOT = np.array([  # the one from the assignment
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -30,7 +31,7 @@ PARKING_LOT = np.array([  # the one from the assignment
     [0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0],
     [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
     [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0],
@@ -121,5 +122,7 @@ class World:
             self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
 
     def render_route(self, route):
+        if len(route) < 2:
+            return  # Need at least 2 points to draw a line
         pts = [(int(x * PIXELS_PER_METER), int(y * PIXELS_PER_METER)) for (x, y) in route]
         pygame.draw.lines(self.screen, (90, 200, 90), False, pts, 2)

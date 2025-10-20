@@ -24,7 +24,8 @@ class VehicleSpec:
     wheelbase: Union[float, None]  # m
     track_width: float
     cargo_manifest: str
-    cruising_velocity: float  # TODO: use in the follower code
+    cruising_velocity: float  # m/s
+    w_max: float  # rad/s
     color: Tuple[int, int, int] = VEHICLE_BG_COLOR
     front_stripe_color: Tuple[int, int, int] = VEHICLE_FRONT_STRIPE_COLOR
 
