@@ -35,6 +35,15 @@ DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)
 
 vehicle = Vehicle(ROBOT, origin=ORIGIN)
 
+# Render something to look at while the path planning is running
+world.clear()
+world.render_grid()
+world.render_obstacles()
+world.render_hud(message="Planning route, please wait...")
+vehicle.render(world)
+pygame.display.flip()
+pygame.event.pump()
+
 route = plan(ORIGIN, DESTINATION, world.obstacles, vehicle_width=vehicle.spec.width)
 if route is None:
     print("NO PATH FOUND!")
@@ -48,18 +57,6 @@ follower = PathFollower(
     vehicle=vehicle
 )
 
-# Render initial frame BEFORE starting the loop
-world.clear()
-world.render_grid()
-world.render_obstacles()
-world.render_route(full_route)
-world.render_hud((vehicle.pos.x, vehicle.pos.y))
-vehicle.render(world)
-pygame.display.flip()
-
-# Initialize the clock properly - this starts the timing
-world.clock.tick(0)
-
 # Reset clock right before loop to avoid large first delta_time
 world.clock.tick()
 
@@ -70,22 +67,22 @@ while running:
     # To avoid the simulation running ahead during the initial planning phase,
     # clamp excessive delta_time (also happens during lag).
     delta_time = min(delta_time, 0.1)  # Max 100ms per frame
-    
+
     for e in pygame.event.get():
         if e.type == pygame.QUIT:
             running = False
-    
+
     follower.update(delta_time)
     vehicle.drive(delta_time, world)
-    
+
     world.clear()
     world.render_grid()
     world.render_obstacles()
     world.render_route(full_route)
-    world.render_hud((vehicle.pos.x, vehicle.pos.y))
+    world.render_hud(vehicle_location=vehicle.pos)
     vehicle.render(world)
     vehicle.render_breadcrumbs(world)
-    
+
     pygame.display.flip()
     world.clock.tick(60)
 

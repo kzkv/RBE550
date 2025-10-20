@@ -24,7 +24,7 @@ HUD_FONT_COLOR = (200, 200, 200)
 # I started with a randomized field, but it was not presenting a consistent and interesting challenge
 # Also, there was no reason to produce a randomized field to then persist it to eliminate run-to-run variation.
 # Working with preset fields for this assignment.
-PARKING_LOT = np.array([  # the one from the assignment
+PARKING_LOT_1 = np.array([  # the one from the assignment
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0],
     [1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0],
@@ -38,6 +38,23 @@ PARKING_LOT = np.array([  # the one from the assignment
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1],
 ], dtype=bool)
+
+PARKING_LOT_2 = np.array([
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    [0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0],
+    [0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0],
+    [1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0],
+    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0],
+    [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1],
+], dtype=bool)
+
+PARKING_LOT = PARKING_LOT_2
 
 
 @dataclass
@@ -103,22 +120,25 @@ class World:
                     r = pygame.Rect(x * s, y * s, s, s)
                     pygame.draw.rect(self.screen, OBSTACLE_BG_COLOR, r)
 
-    def render_hud(self, vehicle_location):
+    def render_hud(self, vehicle_location: Pos = None, message: str = ""):
+        text = message
+
         mx, my = pygame.mouse.get_pos()
         x, y = pixel_to_world(mx, my)
         row, col = world_to_grid(x, y)
 
         in_bounds = (0 <= row < self.grid_dimensions and 0 <= col < self.grid_dimensions)
-
         hud_rect = pygame.Rect(0, self.field_dimensions, self.field_dimensions, self.hud_height)
         pygame.draw.rect(self.screen, HUD_BG_COLOR, hud_rect)
 
-        # assumes the cursor is always within bounds
-        cursor_location_string = f"{x:04.1f}, {y:04.1f} (row/col {row:02d}, {col:02d})"
-        vehicle_location_string = f"{vehicle_location[0]:04.1f}, {vehicle_location[1]:04.1f}"
-        text = f"Cursor: {cursor_location_string}   Vehicle: {vehicle_location_string}"
+        if vehicle_location:
+            cursor_location_string = f"{x:04.1f}, {y:04.1f} (row/col {row:02d}, {col:02d})"
+            vehicle_location_string = f"{vehicle_location.x:04.1f}, {vehicle_location.y:04.1f}"
+            text = f"Cursor: {cursor_location_string}   Vehicle: {vehicle_location_string}   {message}"
+
         img = self.font.render(text, True, HUD_FONT_COLOR)
-        if in_bounds:
+
+        if in_bounds:  # assumes the cursor is always within bounds
             self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
 
     def render_route(self, route):

@@ -29,12 +29,12 @@ from world import CELL_SIZE
 from world import Pos, world_to_grid, GRID_DIMENSIONS
 
 # Planning constants
-PLANNED_POS_ERROR_THRESHOLD = 0.25  # m
-PLANNED_HEADING_ERROR_THRESHOLD = math.radians(5)  # rad (deg)
+PLANNED_POS_ERROR_THRESHOLD = 0.5  # m
+PLANNED_HEADING_ERROR_THRESHOLD = math.radians(10)  # rad (deg)
 
 # Motion primitive parameters
-ARC_LENGTHS = [1.5, 3.0, 6.0]
-CURVATURES = [0.0, 0.15, -0.15, 0.3, -0.3, 0.5, -0.5, 0.8, -0.8, 1.0, -1.0]
+ARC_LENGTHS = [0.5, 1.5, 3.0, 6.0]
+CURVATURES = [0.0, 0.15, -0.15, 0.3, -0.3, 0.5, -0.5, 0.8, -0.8, 1.5, -1.5]
 PRIMITIVE_STEPS = 10
 
 # Discretization resolution; these are magic parameters that had to be tuned to achieve good performance.
