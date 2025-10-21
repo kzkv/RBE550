@@ -26,14 +26,26 @@ ROBOT = VehicleSpec(
     wheelbase=None,
     cargo_manifest="Burrito",
     cruising_velocity=3.0,  # A speedy little burrito carrier
-    w_max=math.pi / 4,
+    w_max=math.pi / 2,
     track_width=0.57  # Assumed the same as the vehicle
 )
 
+CAR = VehicleSpec(
+    length=5.2,
+    width=1.8,
+    wheelbase=2.8,
+    cargo_manifest="Donuts",
+    cruising_velocity=8.0,  # The donut carrier is faster than the burrito carrier
+    w_max=math.pi / 8,  # Limited turning rate
+    track_width=1.8
+)
+
+# ORIGIN = Pos(x=1.5, y=3.0, heading=math.pi / 2)
 ORIGIN = Pos(x=1.5, y=1.5, heading=math.pi / 2)
 DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)  # TODO: IMPORTANT! Specify a bounding box instead of a point/heading
 
 vehicle = Vehicle(ROBOT, origin=ORIGIN)
+# vehicle = Vehicle(CAR, origin=ORIGIN)
 
 # Render something to look at while the path planning is running
 world.clear()

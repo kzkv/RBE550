@@ -15,6 +15,7 @@ Key design decisions:
 
 import math
 import heapq
+import time 
 from typing import List, Tuple, Optional, Set
 import numpy as np
 from dataclasses import dataclass, field
@@ -85,15 +86,21 @@ def check_obb_collision(corners: List[Tuple[float, float]], obstacles: np.ndarra
 PLANNED_POS_ERROR_THRESHOLD = 0.5  # m
 PLANNED_HEADING_ERROR_THRESHOLD = math.radians(3)  # rad (deg)
 
+pi = math.pi
+
 # Motion primitive parameters  # TODO: it would be great to smooth the trajectory
-ARC_LENGTHS = [0.0, 0.25, 0.5, 1.5, 3.0, 6.0]
-CURVATURES = [0.0, 0.15, -0.15, 0.3, -0.3, 0.5, -0.5, 0.8, -0.8, 1.5, -1.5]
+ARC_LENGTHS = [0.75, 1.5, 3.0, 6.0]
+CURVATURES = [0.0, pi/24, -pi/24, pi/12, -pi/12, pi/6, -pi/6, pi/4, -pi/4, pi/2, -pi/2, pi, -pi]
 PRIMITIVE_STEPS = 10
+
+# Prefer longer arcs; TODO: don't forget to highlight in the report how essential this proved to be
+ARC_LENGTH_BIAS_WEIGHT = 2.0
+MAX_ARC_LENGTH = max(ARC_LENGTHS)  
 
 # Discretization resolution; these are magic parameters that had to be tuned to achieve good performance.
 # Too coarse or too fine is failing the path planning.
-XY_RESOLUTION = CELL_SIZE / 4.0
-THETA_RESOLUTION = 0.4  # ~23 deg
+XY_RESOLUTION = 0.75
+THETA_RESOLUTION = math.pi / 6  # ~30 deg
 
 # Safety margins
 VEHICLE_SAFETY_MARGIN = 0.2  # m
@@ -298,6 +305,8 @@ def plan(
 ) -> Optional[List[Pos]]:
     """A* path planning with OBB collision checking"""
 
+    start_time = time.perf_counter()  # Start timing
+
     print(f"\nA* Path Planning")
     print(f"  Origin: ({origin.x:.2f}, {origin.y:.2f}, {math.degrees(origin.heading):.0f}°)")
     print(f"  Goal:   ({goal.x:.2f}, {goal.y:.2f}, {math.degrees(goal.heading):.0f}°)")
@@ -333,9 +342,12 @@ def plan(
         heading_error = current.state.heading_error_to(goal)
 
         if dist_to_goal < PLANNED_POS_ERROR_THRESHOLD and heading_error < PLANNED_HEADING_ERROR_THRESHOLD:
-            # TODO: it would be cool to visualize all tried paths in A* for debugging
+            elapsed_time = time.perf_counter() - start_time  # Calculate elapsed time
+            
             print(f"\nPATH FOUND")
+            print(f"  Planning time: {elapsed_time:.3f}s")
             print(f"  Nodes expanded: {nodes_expanded}")
+            print(f"  Nodes per second: {nodes_expanded / elapsed_time:.0f}")
             print(f"  Path cost: {current.g_score:.1f}m")
             print(f"  Final error: {dist_to_goal:.2f}m, {math.degrees(heading_error):.1f}°")
 
@@ -360,7 +372,12 @@ def plan(
             if not is_collision_free(path_xy, obstacles, vehicle_spec, avg_heading):
                 continue
 
-            g_score = current.g_score + abs(primitive.arc_length)
+            # Bias towards longer arcs by penalizing shorter ones
+            # Penalty is inversely proportional to arc length
+            # Normalized by MAX_ARC_LENGTH so the penalty is between 0 and ARC_LENGTH_BIAS_WEIGHT
+            arc_bias_penalty = ARC_LENGTH_BIAS_WEIGHT * (1.0 - primitive.arc_length / MAX_ARC_LENGTH)
+            
+            g_score = current.g_score + abs(primitive.arc_length) + arc_bias_penalty
             f_score = g_score + heuristic(new_state, goal)
 
             neighbor = SearchNode(
@@ -376,5 +393,6 @@ def plan(
         if nodes_expanded % PROGRESS_INTERVAL == 0:
             print(f"  {nodes_expanded} nodes expanded")
 
-    print(f"NO PATH FOUND after {nodes_expanded} nodes")
+    elapsed_time = time.perf_counter() - start_time
+    print(f"NO PATH FOUND after {nodes_expanded} nodes in {elapsed_time:.3f}s")
     return None
