@@ -1,8 +1,3 @@
-# Tom Kazakov
-# RBE 550
-# Assignment 4, Valet
-# Gen AI usage: Claude for path planning algo; the generated code snippets refactored beyond recognition
-
 """
 Lattice-based planner contructs the path out of precomputed motion primitives.
 Takes into account target heading. Applies safety margins (radius of vehicle footprint).
@@ -30,10 +25,10 @@ from world import Pos, world_to_grid, GRID_DIMENSIONS
 
 # Planning constants
 PLANNED_POS_ERROR_THRESHOLD = 0.5  # m
-PLANNED_HEADING_ERROR_THRESHOLD = math.radians(10)  # rad (deg)
+PLANNED_HEADING_ERROR_THRESHOLD = math.radians(3)  # rad (deg)
 
-# Motion primitive parameters
-ARC_LENGTHS = [0.5, 1.5, 3.0, 6.0]
+# Motion primitive parameters  # TODO: it would be great to smooth the trajectory
+ARC_LENGTHS = [0.0, 0.25, 0.5, 1.5, 3.0, 6.0]
 CURVATURES = [0.0, 0.15, -0.15, 0.3, -0.3, 0.5, -0.5, 0.8, -0.8, 1.5, -1.5]
 PRIMITIVE_STEPS = 10
 
@@ -269,10 +264,6 @@ def plan(
             path = reconstruct_path(current)
 
             print(f"  Reconstructed {len(path)} waypoints")
-
-            if path and math.hypot(path[-1][0] - goal.x, path[-1][1] - goal.y) > 0.1:
-                path.append((goal.x, goal.y))
-
             return path
 
         for primitive in primitives:

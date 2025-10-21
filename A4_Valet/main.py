@@ -62,28 +62,32 @@ world.clock.tick()
 
 running = True
 while running:
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            running = False
+
     delta_time = world.clock.get_time() / 1000.0
 
     # To avoid the simulation running ahead during the initial planning phase,
     # clamp excessive delta_time (also happens during lag).
     delta_time = min(delta_time, 0.1)  # Max 100ms per frame
 
-    for e in pygame.event.get():
-        if e.type == pygame.QUIT:
-            running = False
-
-    follower.update(delta_time)
-    vehicle.drive(delta_time, world)
-
     world.clear()
     world.render_grid()
     world.render_obstacles()
-    world.render_route(full_route)
-    world.render_hud(vehicle_location=vehicle.pos)
+
+    if len(route) > 1:  # we actually have a route to follow
+        follower.update(delta_time)
+        vehicle.drive(delta_time, world)
+        world.render_hud(vehicle_location=vehicle.pos)
+        world.render_route(full_route)
+    else:
+        world.render_hud(message="NO PATH FOUND!")
+
     vehicle.render(world)
     vehicle.render_breadcrumbs(world)
 
     pygame.display.flip()
     world.clock.tick(60)
 
-pygame.quit()
+# pygame.quit()
