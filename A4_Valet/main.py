@@ -31,7 +31,7 @@ ROBOT = VehicleSpec(
 )
 
 ORIGIN = Pos(x=1.5, y=1.5, heading=math.pi / 2)
-DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)
+DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)  # TODO: IMPORTANT! Specify a bounding box instead of a point/heading
 
 vehicle = Vehicle(ROBOT, origin=ORIGIN)
 
