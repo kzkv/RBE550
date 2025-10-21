@@ -56,7 +56,7 @@ PARKING_LOT_2 = np.array([
     [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1],
 ], dtype=bool)
 
-PARKING_LOT = PARKING_LOT_1
+PARKING_LOT = PARKING_LOT_2
 
 
 @dataclass
@@ -161,5 +161,5 @@ class World:
     def render_route(self, route: List[Pos]):
         if len(route) < 2:
             return  # Need at least 2 points to draw a line
-        pts = [(int(x * PIXELS_PER_METER), int(y * PIXELS_PER_METER)) for (x, y) in route]
+        pts = [(int(pos.x * PIXELS_PER_METER), int(pos.y * PIXELS_PER_METER)) for pos in route]
         pygame.draw.lines(self.screen, (90, 200, 90), False, pts, 2)
