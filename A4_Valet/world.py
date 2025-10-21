@@ -4,9 +4,11 @@
 # Obstacle generator: parametric generation for the grid of specified size filling with tetrominoes
 # Refactor/partial reuse of the A2 code as well as our Firebot course project code
 from dataclasses import dataclass
+from typing import Tuple, List
 
 import numpy as np
 import pygame
+import math
 
 rng = np.random.default_rng()
 
@@ -62,6 +64,21 @@ class Pos:
     x: float  # m
     y: float  # m
     heading: float  # rad, 0 is along x-axis, CCW is positive
+
+    def distance_to(self, other: 'Pos') -> float:
+        """Euclidean distance to another position"""
+        return math.hypot(self.x - other.x, self.y - other.y)
+
+    def heading_error_to(self, other: 'Pos') -> float:
+        """Heading error to another position (wrapped to [-pi, pi])"""
+        error = abs(self.heading - other.heading)
+        if error > math.pi:
+            error = 2 * math.pi - error
+        return error
+
+    def to_xy_tuple(self) -> Tuple[float, float]:
+        """Convert to (x, y) tuple for rendering"""
+        return (self.x, self.y)
 
 
 def grid_to_world(row, col):
@@ -141,7 +158,7 @@ class World:
         if in_bounds:  # assumes the cursor is always within bounds
             self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
 
-    def render_route(self, route):
+    def render_route(self, route: List[Pos]):
         if len(route) < 2:
             return  # Need at least 2 points to draw a line
         pts = [(int(x * PIXELS_PER_METER), int(y * PIXELS_PER_METER)) for (x, y) in route]

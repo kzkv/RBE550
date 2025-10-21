@@ -48,7 +48,7 @@ route = plan(ORIGIN, DESTINATION, world.obstacles, vehicle.spec)
 
 if route is None:
     print("NO PATH FOUND!")
-    route = [(ORIGIN.x, ORIGIN.y)]
+    route = [ORIGIN]
 
 full_route = route
 

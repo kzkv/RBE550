@@ -13,6 +13,7 @@ from bisect import bisect_left
 from typing import List, Tuple
 
 from vehicle import Vehicle
+from world import Pos
 
 BRAKING_DISTANCE = 1.5  # TODO: derive from cruising velocity?
 POS_ERROR_THRESHOLD = 0.1
@@ -21,7 +22,7 @@ POS_ERROR_THRESHOLD = 0.1
 class PathFollower:
     def __init__(
             self,
-            route: List[Tuple[float, float]],  # TODO: refactor into a list of Pos
+            route: List[Pos],
             lookahead: float,
             vehicle: Vehicle,
     ):
@@ -33,46 +34,37 @@ class PathFollower:
         # Precompute cumulative arc lengths
         self.cumulative_arc_lengths = [0.0]
         for i in range(1, len(route)):
+            prev = route[i - 1]
+            curr = route[i]
             self.cumulative_arc_lengths.append(
-                self.cumulative_arc_lengths[-1] + self.distance_between(route[i - 1], route[i])
+                self.cumulative_arc_lengths[-1] + prev.distance_to(curr)
             )
         self.total_arc_length = self.cumulative_arc_lengths[-1]
 
-        # Start at the beginning - vehicle is placed at route start
         self.traveled = 0.0
-
         self.we_are_there = False
         self._v_last = 0.0
-
-        self.destination = (self.route[-1][0], self.route[-1][1])
-
-    @staticmethod
-    def distance_between(origin: Tuple[float, float], destination: Tuple[float, float]) -> float:
-        ox, oy = origin
-        dx, dy = destination
-        return math.hypot(ox - dx, oy - dy)
+        self.destination = route[-1]
 
     def _interpolate_at(self, arclength: float) -> Tuple[float, float]:
-        """Interpolate a point along the polyline at arclength."""
+        """Interpolate a point along the polyline at arclength"""
+        arclength = min(self.total_arc_length, arclength)
 
-        arclength = min(self.total_arc_length, arclength)  # if lookahead is beyond route, clamp to total length
-
-        # Find the first segment index that cumulative_arc_lengths[i] >= arclength
         i = min(
             bisect_left(self.cumulative_arc_lengths, arclength),
             len(self.cumulative_arc_lengths) - 1
         )
 
         segment_prev, segment = self.cumulative_arc_lengths[i - 1], self.cumulative_arc_lengths[i]
-        x0, y0 = self.route[i - 1]
-        x1, y1 = self.route[i]
+        p0 = self.route[i - 1]
+        p1 = self.route[i]
 
-        # How far along the segment we are?
-        if segment - segment_prev == 0:  # work with a corner case of a zero-length segment
-            return x0, y0  # TODO: figure out why my planner is supplying zero-length segments
+        if segment - segment_prev == 0:
+            return p0.x, p0.y
 
         segment_fraction = (arclength - segment_prev) / (segment - segment_prev)
-        return x0 + segment_fraction * (x1 - x0), y0 + segment_fraction * (y1 - y0)
+        return (p0.x + segment_fraction * (p1.x - p0.x),
+                p0.y + segment_fraction * (p1.y - p0.y))
 
     def update(self, delta_time: float):
         """Compute (v, w) and command the vehicle"""
@@ -116,7 +108,7 @@ class PathFollower:
         # TODO: consider checking each wheels individually to avoid any corner cases
 
         # Are we there yet?
-        left_to_go = self.distance_between((self.vehicle.pos.x, self.vehicle.pos.y), self.destination)
+        left_to_go = self.vehicle.pos.distance_to(self.destination)
         if left_to_go <= BRAKING_DISTANCE:
             scale = max(0.0, left_to_go / BRAKING_DISTANCE)
             v *= scale

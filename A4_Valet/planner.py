@@ -258,14 +258,14 @@ def heuristic(state: Pos, goal: Pos) -> float:
     return dist + heading_penalty
 
 
-def reconstruct_path(node: SearchNode) -> List[Tuple[float, float]]:
+def reconstruct_path(node: SearchNode) -> List[Pos]:
     """Reconstruct path from goal back to start"""
     segments = []
     current = node
 
     while current is not None:
         if current.path_segment and len(current.path_segment) > 0:
-            segments.append(current.path_segment)
+            segments.append((current.path_segment, current.state.heading))
         current = current.parent
 
     segments.reverse()
@@ -273,13 +273,19 @@ def reconstruct_path(node: SearchNode) -> List[Tuple[float, float]]:
     if not segments:
         return []
 
-    path = list(segments[0])
+    path = []
+    
+    # Add first segment
+    first_seg, first_heading = segments[0]
+    for x, y in first_seg:
+        path.append(Pos(x, y, first_heading))
 
-    for segment in segments[1:]:
-        for point in segment:
-            if path and math.hypot(point[0] - path[-1][0], point[1] - path[-1][1]) < 0.1:
+    # Add subsequent segments, avoiding duplicates
+    for segment, heading in segments[1:]:
+        for x, y in segment:
+            if path and math.hypot(x - path[-1].x, y - path[-1].y) < 0.1:
                 continue
-            path.append(point)
+            path.append(Pos(x, y, heading))
 
     return path
 
@@ -289,7 +295,7 @@ def plan(
         goal: Pos,
         obstacles: np.ndarray,
         vehicle_spec: VehicleSpec,
-) -> Optional[List[Tuple[float, float]]]:
+) -> Optional[List[Pos]]:
     """A* path planning with OBB collision checking"""
 
     print(f"\nA* Path Planning")
@@ -307,7 +313,7 @@ def plan(
         f_score=heuristic(origin, goal),
         state=origin,
         g_score=0.0,
-        path_segment=[(origin.x, origin.y)]
+        path_segment=[origin.to_xy_tuple()]
     )
 
     heapq.heappush(open_set, start_node)
@@ -323,10 +329,8 @@ def plan(
         visited.add(current_key)
         nodes_expanded += 1
 
-        dist_to_goal = math.hypot(current.state.x - goal.x, current.state.y - goal.y)
-        heading_error = abs(current.state.heading - goal.heading)
-        if heading_error > math.pi:
-            heading_error = 2 * math.pi - heading_error
+        dist_to_goal = current.state.distance_to(goal)
+        heading_error = current.state.heading_error_to(goal)
 
         if dist_to_goal < PLANNED_POS_ERROR_THRESHOLD and heading_error < PLANNED_HEADING_ERROR_THRESHOLD:
             # TODO: it would be cool to visualize all tried paths in A* for debugging
@@ -336,7 +340,6 @@ def plan(
             print(f"  Final error: {dist_to_goal:.2f}m, {math.degrees(heading_error):.1f}°")
 
             path = reconstruct_path(current)
-
             print(f"  Reconstructed {len(path)} waypoints")
             return path
 
@@ -351,7 +354,7 @@ def plan(
             # Extract just (x, y) for cross-pattern checks, use full (x, y, heading) for OBB
             path_xy = [(x, y) for x, y, h in path_segment]
 
-            # Use average heading for the segment (or could use per-point heading)
+            # Use average heading for the segment
             avg_heading = (current.state.heading + new_state.heading) / 2.0
 
             if not is_collision_free(path_xy, obstacles, vehicle_spec, avg_heading):
@@ -365,7 +368,7 @@ def plan(
                 state=new_state,
                 g_score=g_score,
                 parent=current,
-                path_segment=path_xy  # Store just (x, y) for path reconstruction
+                path_segment=path_xy
             )
 
             heapq.heappush(open_set, neighbor)
