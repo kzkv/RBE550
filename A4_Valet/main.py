@@ -44,7 +44,8 @@ vehicle.render(world)
 pygame.display.flip()
 pygame.event.pump()
 
-route = plan(ORIGIN, DESTINATION, world.obstacles, vehicle_width=vehicle.spec.width)
+route = plan(ORIGIN, DESTINATION, world.obstacles, vehicle.spec)
+
 if route is None:
     print("NO PATH FOUND!")
     route = [(ORIGIN.x, ORIGIN.y)]

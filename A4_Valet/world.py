@@ -54,7 +54,7 @@ PARKING_LOT_2 = np.array([
     [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1],
 ], dtype=bool)
 
-PARKING_LOT = PARKING_LOT_2
+PARKING_LOT = PARKING_LOT_1
 
 
 @dataclass

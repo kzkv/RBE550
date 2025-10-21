@@ -22,6 +22,64 @@ from itertools import product
 
 from world import CELL_SIZE
 from world import Pos, world_to_grid, GRID_DIMENSIONS
+from vehicle import VehicleSpec
+
+
+def get_obb_corners(x: float, y: float, heading: float, length: float, width: float) -> List[Tuple[float, float]]:
+    """Compute the four corners of an oriented bounding box"""
+    cos_h = math.cos(heading)
+    sin_h = math.sin(heading)
+
+    half_length = length / 2.0
+    half_width = width / 2.0
+
+    # Corners in vehicle frame: front-right, front-left, back-left, back-right
+    local_corners = [
+        (half_length, half_width),
+        (half_length, -half_width),
+        (-half_length, -half_width),
+        (-half_length, half_width),
+    ]
+
+    # Transform to world frame
+    world_corners = []
+    for lx, ly in local_corners:
+        wx = x + lx * cos_h - ly * sin_h
+        wy = y + lx * sin_h + ly * cos_h
+        world_corners.append((wx, wy))
+
+    return world_corners
+
+
+def check_obb_collision(corners: List[Tuple[float, float]], obstacles: np.ndarray) -> bool:
+    """Check if any corner or edge of OBB collides with obstacles"""
+    # Check all four corners
+    for cx, cy in corners:
+        row, col = world_to_grid(cx, cy)
+        if row < 0 or row >= GRID_DIMENSIONS or col < 0 or col >= GRID_DIMENSIONS:
+            return True  # Out of bounds
+        if obstacles[row, col]:
+            return True  # Corner in an obstacle cell
+
+    # Check edges by sampling points between corners
+    num_samples = 3  # Sample points per edge
+    for i in range(4):
+        c1 = corners[i]
+        c2 = corners[(i + 1) % 4]
+
+        for j in range(1, num_samples):
+            t = j / num_samples
+            ex = c1[0] + t * (c2[0] - c1[0])
+            ey = c1[1] + t * (c2[1] - c1[1])
+
+            row, col = world_to_grid(ex, ey)
+            if row < 0 or row >= GRID_DIMENSIONS or col < 0 or col >= GRID_DIMENSIONS:
+                return True
+            if obstacles[row, col]:
+                return True
+
+    return False
+
 
 # Planning constants
 PLANNED_POS_ERROR_THRESHOLD = 0.5  # m
@@ -50,18 +108,18 @@ class MotionPrimitive:
     """Motion primitive representing a curved or straight path segment"""
     arc_length: float
     curvature: float
-    num_steps: int = PRIMITIVE_STEPS  # number of discrete steps along the arc
+    num_steps: int = PRIMITIVE_STEPS
 
-    def apply(self, state: Pos) -> Tuple[Pos, List[Tuple[float, float]]]:
-        """Generate path points and end state for this primitive"""
+    def apply(self, state: Pos) -> Tuple[Pos, List[Tuple[float, float, float]]]:
+        """Generate path points (x, y, heading) and end state for this primitive"""
         path_points = []
 
-        if abs(self.curvature) < 1e-6:  # straight line, simple trig to move in the direction of the current heading
+        if abs(self.curvature) < 1e-6:  # straight line
             for i in range(self.num_steps + 1):
                 s = (i / self.num_steps) * self.arc_length
                 x = state.x + s * math.cos(state.heading)
                 y = state.y + s * math.sin(state.heading)
-                path_points.append((x, y))
+                path_points.append((x, y, state.heading))
 
             end_state = Pos(
                 x=state.x + self.arc_length * math.cos(state.heading),
@@ -69,11 +127,10 @@ class MotionPrimitive:
                 heading=state.heading
             )
 
-        else:  # circular arc, computes curvature center (pivot point)
+        else:  # circular arc
             radius = 1.0 / self.curvature
             d_theta = self.curvature * self.arc_length
 
-            # curvature center
             cx = state.x - radius * math.sin(state.heading)
             cy = state.y + radius * math.cos(state.heading)
 
@@ -81,7 +138,7 @@ class MotionPrimitive:
                 theta_i = state.heading + (i / self.num_steps) * d_theta
                 x = cx + radius * math.sin(theta_i)
                 y = cy - radius * math.cos(theta_i)
-                path_points.append((x, y))
+                path_points.append((x, y, theta_i))
 
             end_heading = state.heading + d_theta
             end_heading = (end_heading + math.pi) % (2 * math.pi) - math.pi
@@ -142,19 +199,21 @@ class SearchNode:
 def is_collision_free(
         path_points: List[Tuple[float, float]],
         obstacles: np.ndarray,
-        vehicle_width: float
+        vehicle_spec: VehicleSpec,
+        heading: float
 ) -> bool:
-    """Check if path collides with obstacles considering vehicle footprint"""
-    world_size = GRID_DIMENSIONS * 3.0
-    safety_radius = vehicle_width / 2.0 + VEHICLE_SAFETY_MARGIN
+    """Two-stage collision checking: cross-pattern for speed, OBB for accuracy"""
+    world_size = GRID_DIMENSIONS * CELL_SIZE
+    safety_radius = vehicle_spec.width / 2.0 + VEHICLE_SAFETY_MARGIN
 
+    # Stage 1: Fast cross-pattern rejection
     for x, y in path_points:
-        # do we fit inside the world?
+        # Boundary check
         if (x < safety_radius or y < safety_radius or
                 x >= world_size - safety_radius or y >= world_size - safety_radius):
             return False
 
-        # do we collide with obstacles?
+        # Quick cross-pattern check (center + 4 cardinal points)
         check_points = [
             (x, y),
             (x + safety_radius, y),
@@ -162,12 +221,26 @@ def is_collision_free(
             (x, y + safety_radius),
             (x, y - safety_radius),
         ]
+
         for cx, cy in check_points:
             row, col = world_to_grid(cx, cy)
             if row < 0 or row >= GRID_DIMENSIONS or col < 0 or col >= GRID_DIMENSIONS:
                 return False
             if obstacles[row, col]:
                 return False
+
+    # Stage 2: Precise OBB validation
+    # Sample the path at key points (start, middle, end + every Nth point)
+    obb_check_interval = max(1, len(path_points) // 5)  # Check ~5 positions along path
+
+    for i in range(0, len(path_points), obb_check_interval):
+        x, y = path_points[i]
+
+        # Compute OBB corners at this position
+        corners = get_obb_corners(x, y, heading, vehicle_spec.length, vehicle_spec.width)
+
+        if check_obb_collision(corners, obstacles):
+            return False
 
     return True
 
@@ -215,13 +288,14 @@ def plan(
         origin: Pos,
         goal: Pos,
         obstacles: np.ndarray,
-        vehicle_width: float
+        vehicle_spec: VehicleSpec,
 ) -> Optional[List[Tuple[float, float]]]:
-    """A* path planning with vehicle footprint and goal heading awareness"""
+    """A* path planning with OBB collision checking"""
 
     print(f"\nA* Path Planning")
     print(f"  Origin: ({origin.x:.2f}, {origin.y:.2f}, {math.degrees(origin.heading):.0f}°)")
     print(f"  Goal:   ({goal.x:.2f}, {goal.y:.2f}, {math.degrees(goal.heading):.0f}°)")
+    print(f"  Vehicle: {vehicle_spec.length:.2f}m long × {vehicle_spec.width:.2f}m wide")
 
     primitives = create_motion_primitives()
     print(f"  Motion primitives: {len(primitives)}")
@@ -266,6 +340,7 @@ def plan(
             print(f"  Reconstructed {len(path)} waypoints")
             return path
 
+        # Expand neighbors
         for primitive in primitives:
             new_state, path_segment = primitive.apply(current.state)
 
@@ -273,7 +348,13 @@ def plan(
             if new_key in visited:
                 continue
 
-            if not is_collision_free(path_segment, obstacles, vehicle_width):
+            # Extract just (x, y) for cross-pattern checks, use full (x, y, heading) for OBB
+            path_xy = [(x, y) for x, y, h in path_segment]
+
+            # Use average heading for the segment (or could use per-point heading)
+            avg_heading = (current.state.heading + new_state.heading) / 2.0
+
+            if not is_collision_free(path_xy, obstacles, vehicle_spec, avg_heading):
                 continue
 
             g_score = current.g_score + abs(primitive.arc_length)
@@ -284,7 +365,7 @@ def plan(
                 state=new_state,
                 g_score=g_score,
                 parent=current,
-                path_segment=path_segment
+                path_segment=path_xy  # Store just (x, y) for path reconstruction
             )
 
             heapq.heappush(open_set, neighbor)
