@@ -1,5 +1,5 @@
 """
-Lattice-based planner contructs the path out of precomputed motion primitives.
+Lattice-based planner constructs the path out of precomputed motion primitives.
 Takes into account target heading. Applies safety margins (radius of vehicle footprint).
 
 Key design decisions:
@@ -83,8 +83,9 @@ def check_obb_collision(corners: List[Tuple[float, float]], obstacles: np.ndarra
 
 
 # Planning constants
-PLANNED_POS_ERROR_THRESHOLD = 0.5  # m
-PLANNED_HEADING_ERROR_THRESHOLD = math.radians(3)  # rad (deg)
+PLANNED_POS_ERROR_THRESHOLD = 1.5  # m
+# PLANNED_HEADING_ERROR_THRESHOLD = math.radians(3)  # rad (deg)
+PLANNED_HEADING_ERROR_THRESHOLD = math.radians(90)  # rad (deg)
 
 pi = math.pi
 
@@ -117,8 +118,8 @@ class MotionPrimitive:
     curvature: float
     num_steps: int = PRIMITIVE_STEPS
 
-    def apply(self, state: Pos) -> Tuple[Pos, List[Tuple[float, float, float]]]:
-        """Generate path points (x, y, heading) and end state for this primitive"""
+    def apply(self, state: Pos) -> Tuple[Pos, List[Pos]]:
+        """Generate path points as Pos objects and end state for this primitive"""
         path_points = []
 
         if abs(self.curvature) < 1e-6:  # straight line
@@ -126,7 +127,7 @@ class MotionPrimitive:
                 s = (i / self.num_steps) * self.arc_length
                 x = state.x + s * math.cos(state.heading)
                 y = state.y + s * math.sin(state.heading)
-                path_points.append((x, y, state.heading))
+                path_points.append(Pos(x, y, state.heading))
 
             end_state = Pos(
                 x=state.x + self.arc_length * math.cos(state.heading),
@@ -145,14 +146,14 @@ class MotionPrimitive:
                 theta_i = state.heading + (i / self.num_steps) * d_theta
                 x = cx + radius * math.sin(theta_i)
                 y = cy - radius * math.cos(theta_i)
-                path_points.append((x, y, theta_i))
+                path_points.append(Pos(x, y, theta_i))
 
             end_heading = state.heading + d_theta
             end_heading = (end_heading + math.pi) % (2 * math.pi) - math.pi
 
             end_state = Pos(
-                x=path_points[-1][0],
-                y=path_points[-1][1],
+                x=path_points[-1].x,
+                y=path_points[-1].y,
                 heading=end_heading
             )
 
@@ -171,7 +172,7 @@ def create_motion_primitives() -> List[MotionPrimitive]:
 class StateKey:
     """
     Discretized state for hashing in a visited set. While in shape it's similar to Pos, it has different semantics:
-    unlike Pos (a precise position in the world), Statekey is a "bucket" of similar poses.
+    unlike Pos (a precise position in the world), StateKey is a "bucket" of similar poses.
     """
     x: float
     y: float
@@ -190,7 +191,7 @@ class StateKey:
         return hash((self.x, self.y, self.theta))
 
     def __eq__(self, other):
-        return (self.x == other.x and self.y == other.y and self.theta == other.theta)
+        return self.x == other.x and self.y == other.y and self.theta == other.theta
 
 
 @dataclass(order=True)
@@ -200,33 +201,32 @@ class SearchNode:
     state: Pos = field(compare=False)  # robot position at this node
     g_score: float = field(compare=False)  # actual distance from start to this node
     parent: Optional['SearchNode'] = field(default=None, compare=False)  # pointer for path reconstruction
-    path_segment: List[Tuple[float, float]] = field(default_factory=list, compare=False)
+    path_segment: List[Pos] = field(default_factory=list, compare=False)  # Store Pos objects
 
 
 def is_collision_free(
-        path_points: List[Tuple[float, float]],
+        path_points: List[Pos],
         obstacles: np.ndarray,
         vehicle_spec: VehicleSpec,
-        heading: float
 ) -> bool:
     """Two-stage collision checking: cross-pattern for speed, OBB for accuracy"""
     world_size = GRID_DIMENSIONS * CELL_SIZE
     safety_radius = vehicle_spec.width / 2.0 + VEHICLE_SAFETY_MARGIN
 
-    # Stage 1: Fast cross-pattern rejection
-    for x, y in path_points:
+    # Stage 1: Fast cross-pattern rejection on all points
+    for pos in path_points:
         # Boundary check
-        if (x < safety_radius or y < safety_radius or
-                x >= world_size - safety_radius or y >= world_size - safety_radius):
+        if (pos.x < safety_radius or pos.y < safety_radius or
+                pos.x >= world_size - safety_radius or pos.y >= world_size - safety_radius):
             return False
 
         # Quick cross-pattern check (center + 4 cardinal points)
         check_points = [
-            (x, y),
-            (x + safety_radius, y),
-            (x - safety_radius, y),
-            (x, y + safety_radius),
-            (x, y - safety_radius),
+            (pos.x, pos.y),
+            (pos.x + safety_radius, pos.y),
+            (pos.x - safety_radius, pos.y),
+            (pos.x, pos.y + safety_radius),
+            (pos.x, pos.y - safety_radius),
         ]
 
         for cx, cy in check_points:
@@ -236,16 +236,9 @@ def is_collision_free(
             if obstacles[row, col]:
                 return False
 
-    # Stage 2: Precise OBB validation
-    # Sample the path at key points (start, middle, end + every Nth point)
-    obb_check_interval = max(1, len(path_points) // 5)  # Check ~5 positions along path
-
-    for i in range(0, len(path_points), obb_check_interval):
-        x, y = path_points[i]
-
-        # Compute OBB corners at this position
-        corners = get_obb_corners(x, y, heading, vehicle_spec.length, vehicle_spec.width)
-
+    # Stage 2: Precise OBB validation - check all points
+    for pos in path_points:
+        corners = get_obb_corners(pos.x, pos.y, pos.heading, vehicle_spec.length, vehicle_spec.width)
         if check_obb_collision(corners, obstacles):
             return False
 
@@ -266,13 +259,13 @@ def heuristic(state: Pos, goal: Pos) -> float:
 
 
 def reconstruct_path(node: SearchNode) -> List[Pos]:
-    """Reconstruct path from goal back to start"""
+    """Reconstruct the path from goal back to start"""
     segments = []
     current = node
 
     while current is not None:
         if current.path_segment and len(current.path_segment) > 0:
-            segments.append((current.path_segment, current.state.heading))
+            segments.append(current.path_segment)
         current = current.parent
 
     segments.reverse()
@@ -282,17 +275,12 @@ def reconstruct_path(node: SearchNode) -> List[Pos]:
 
     path = []
     
-    # Add first segment
-    first_seg, first_heading = segments[0]
-    for x, y in first_seg:
-        path.append(Pos(x, y, first_heading))
-
-    # Add subsequent segments, avoiding duplicates
-    for segment, heading in segments[1:]:
-        for x, y in segment:
-            if path and math.hypot(x - path[-1].x, y - path[-1].y) < 0.1:
+    # Add all segments
+    for segment in segments:
+        for pos in segment:
+            if path and pos.distance_to(path[-1]) < 0.1:
                 continue
-            path.append(Pos(x, y, heading))
+            path.append(pos)
 
     return path
 
@@ -322,7 +310,7 @@ def plan(
         f_score=heuristic(origin, goal),
         state=origin,
         g_score=0.0,
-        path_segment=[origin.to_xy_tuple()]
+        path_segment=[origin]
     )
 
     heapq.heappush(open_set, start_node)
@@ -363,20 +351,14 @@ def plan(
             if new_key in visited:
                 continue
 
-            # Extract just (x, y) for cross-pattern checks, use full (x, y, heading) for OBB
-            path_xy = [(x, y) for x, y, h in path_segment]
-
-            # Use average heading for the segment
-            avg_heading = (current.state.heading + new_state.heading) / 2.0
-
-            if not is_collision_free(path_xy, obstacles, vehicle_spec, avg_heading):
+            if not is_collision_free(path_segment, obstacles, vehicle_spec):
                 continue
 
             # Bias towards longer arcs by penalizing shorter ones
             # Penalty is inversely proportional to arc length
-            # Normalized by MAX_ARC_LENGTH so the penalty is between 0 and ARC_LENGTH_BIAS_WEIGHT
+            # Normalized by MAX_ARC_LENGTH, so the penalty is between 0 and ARC_LENGTH_BIAS_WEIGHT
             arc_bias_penalty = ARC_LENGTH_BIAS_WEIGHT * (1.0 - primitive.arc_length / MAX_ARC_LENGTH)
-            
+
             g_score = current.g_score + abs(primitive.arc_length) + arc_bias_penalty
             f_score = g_score + heuristic(new_state, goal)
 
@@ -385,7 +367,7 @@ def plan(
                 state=new_state,
                 g_score=g_score,
                 parent=current,
-                path_segment=path_xy
+                path_segment=path_segment
             )
 
             heapq.heappush(open_set, neighbor)

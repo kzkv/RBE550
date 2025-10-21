@@ -9,7 +9,7 @@ import math
 
 from follower import PathFollower
 from vehicle import VehicleSpec, Vehicle
-from world import World, Pos
+from world import World, Pos, PARKING_LOT_1, PARKING_LOT_2, EMPTY_PARKING_LOT, EMPTY_PARKING_LOT_FOR_TRAILER
 from planner import plan
 
 # TODO: refactor prints into log statements
@@ -18,8 +18,6 @@ rng = np.random.default_rng()
 pygame.init()
 pygame.display.set_caption("Valet")
 
-world = World()
-
 ROBOT = VehicleSpec(
     length=0.7,
     width=0.57,
@@ -27,7 +25,9 @@ ROBOT = VehicleSpec(
     cargo_manifest="Burrito",
     cruising_velocity=3.0,  # A speedy little burrito carrier
     w_max=math.pi / 2,
-    track_width=0.57  # Assumed the same as the vehicle
+    track_width=0.57,  # Assumed the same as the vehicle
+    origin=Pos(x=1.5, y=1.5, heading=math.pi / 2),
+    destination=Pos(x=28.7, y=34.5, heading=0.0)
 )
 
 CAR = VehicleSpec(
@@ -37,34 +37,35 @@ CAR = VehicleSpec(
     cargo_manifest="Donuts",
     cruising_velocity=8.0,  # The donut carrier is faster than the burrito carrier
     w_max=math.pi / 8,  # Limited turning rate
-    track_width=1.8
+    track_width=1.8,
+    origin=Pos(x=1.5, y=3.0, heading=math.pi / 2),
+    destination=Pos(x=27.0, y=34.5, heading=0.0)
 )
 
-# TODO: make ORIGIN/DESTINATION a part of the vehicle spec
-ORIGIN = Pos(x=1.5, y=1.5, heading=math.pi / 2)
-# ORIGIN = Pos(x=3.0, y=3.0, heading=math.pi / 2)
+"""MODIFY THIS TO SET UP THE SIMULATION"""
+vehicle = Vehicle(ROBOT)
+# vehicle = Vehicle(CAR)
 
-DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)
-# DESTINATION = Pos(x=24.0, y=34.5, heading=0.0)
-
-vehicle = Vehicle(ROBOT, origin=ORIGIN)
-# vehicle = Vehicle(CAR, origin=ORIGIN)
+world = World(PARKING_LOT_1)
+# world = World(PARKING_LOT_2)
+# world = World(EMPTY_PARKING_LOT)
+# world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
 # Render something to look at while the path planning is running
 world.clear()
 world.render_grid()
 world.render_obstacles()
-vehicle.render(world, pos=DESTINATION)  # TODO: mention using the vehicle render as the bounding box
+vehicle.render(world, pos=vehicle.spec.destination)  # TODO: mention using the vehicle render as the bounding box
 vehicle.render(world)  # Render current position
 world.render_hud(message="Planning route, please wait...")
 pygame.display.flip()
 pygame.event.pump()
 
-route = plan(ORIGIN, DESTINATION, world.obstacles, vehicle.spec)
+route = plan(vehicle.spec.origin, vehicle.spec.destination, world.obstacles, vehicle.spec)
 
 if route is None:
     print("NO PATH FOUND!")
-    route = [ORIGIN]
+    route = [vehicle.spec.origin]
 
 full_route = route
 
@@ -92,7 +93,7 @@ while running:
     world.clear()
     world.render_grid()
     world.render_obstacles()
-    vehicle.render(world, pos=DESTINATION)  # Render destination
+    vehicle.render(world, pos=vehicle.spec.destination)  # Render destination
 
     if len(route) > 1:  # we actually have a route to follow
         follower.update(delta_time)

@@ -26,14 +26,16 @@ class VehicleSpec:
     cargo_manifest: str
     cruising_velocity: float  # m/s
     w_max: float  # rad/s
+    origin: Pos
+    destination: Pos
     color: Tuple[int, int, int] = VEHICLE_BG_COLOR
     front_stripe_color: Tuple[int, int, int] = VEHICLE_FRONT_STRIPE_COLOR
 
 
 class Vehicle:
-    def __init__(self, spec: VehicleSpec, origin: Pos):
+    def __init__(self, spec: VehicleSpec):
         self.spec = spec
-        self.pos = origin
+        self.pos = spec.origin
 
         self._destination: Optional[Tuple[float, float]] = None
 
@@ -59,15 +61,15 @@ class Vehicle:
         th = self.pos.heading
 
         if abs(w) < 1e-8:  # moving in a straight line
-            self.pos.x += v * math.cos(th) * delta_time
-            self.pos.y += v * math.sin(th) * delta_time
+            new_x = self.pos.x + v * math.cos(th) * delta_time
+            new_y = self.pos.y + v * math.sin(th) * delta_time
+            self.pos = Pos(new_x, new_y, th)
         else:  # unicycle update for constant v, w over delta_time
             th_new = th + w * delta_time
-            self.pos.x += (v / w) * (math.sin(th_new) - math.sin(th))
-            self.pos.y += (v / w) * (-math.cos(th_new) + math.cos(th))
-            self.pos.heading = th_new
-
-        self.pos.heading = self._wrap_angle(self.pos.heading)  # Keep heading in [-pi, pi]
+            new_x = self.pos.x + (v / w) * (math.sin(th_new) - math.sin(th))
+            new_y = self.pos.y + (v / w) * (-math.cos(th_new) + math.cos(th))
+            th_new = self._wrap_angle(th_new)
+            self.pos = Pos(new_x, new_y, th_new)
 
         # Breadcrumbs update
         ppm = world.pixels_per_meter

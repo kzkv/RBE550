@@ -88,13 +88,7 @@ EMPTY_PARKING_LOT_FOR_TRAILER = np.array([
 ], dtype=bool)
 
 
-# PARKING_LOT = PARKING_LOT_1
-PARKING_LOT = PARKING_LOT_2
-# PARKING_LOT = EMPTY_PARKING_LOT
-# PARKING_LOT = EMPTY_PARKING_LOT_FOR_TRAILER
-
-
-@dataclass
+@dataclass(frozen=True)
 class Pos:
     x: float  # m
     y: float  # m
@@ -136,7 +130,7 @@ def pixel_to_world(px, py):
 
 
 class World:
-    def __init__(self):
+    def __init__(self, obstacles):
         self.grid_dimensions = GRID_DIMENSIONS
         self.pixels_per_meter = PIXELS_PER_METER
         self.cell_dimensions = CELL_SIZE * self.pixels_per_meter
@@ -145,7 +139,7 @@ class World:
         self.hud_padding = 10
         self.hud_height = self.font.get_height() + self.hud_padding * 2
 
-        self.obstacles = PARKING_LOT
+        self.obstacles = obstacles
 
         self.screen = pygame.display.set_mode((self.field_dimensions, self.field_dimensions + self.hud_height))
         self.clock = pygame.time.Clock()
