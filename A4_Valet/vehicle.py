@@ -28,6 +28,8 @@ class VehicleSpec:
     w_max: float  # rad/s
     origin: Pos
     destination: Pos
+    planned_xy_error: float
+    planned_heading_error: float
     color: Tuple[int, int, int] = VEHICLE_BG_COLOR
     front_stripe_color: Tuple[int, int, int] = VEHICLE_FRONT_STRIPE_COLOR
 
@@ -114,3 +116,20 @@ class Vehicle:
         """max_velocity is not controlled for <=0"""
         for (px, py), v in self.breadcrumbs:
             pygame.draw.circle(world.screen, BREADCRUMB_COLOR, (px, py), max(1, int(v)))
+
+    def render_parking_zone(self, world):
+        """
+        Render acceptable parking zone as a circle. I'm using a liberal interpretation of
+        "the exact boundary of this goal box is at your discretion" from the assignment.
+        """
+
+        ppm = world.pixels_per_meter
+        dest_px = int(self.spec.destination.x * ppm)
+        dest_py = int(self.spec.destination.y * ppm)
+
+        # Radius is xy_error + furthest corner of vehicle from its center
+        vehicle_corner_distance = math.hypot(self.spec.length / 2, self.spec.width / 2)
+        radius = self.spec.planned_xy_error + vehicle_corner_distance
+        radius_px = int(radius * ppm)
+
+        pygame.draw.circle(world.screen, DESTINATION_COLOR, (dest_px, dest_py), radius_px, width=1)

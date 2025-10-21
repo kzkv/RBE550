@@ -15,7 +15,7 @@ Key design decisions:
 
 import math
 import heapq
-import time 
+import time
 from typing import List, Tuple, Optional, Set
 import numpy as np
 from dataclasses import dataclass, field
@@ -31,8 +31,8 @@ def get_obb_corners(x: float, y: float, heading: float, length: float, width: fl
     cos_h = math.cos(heading)
     sin_h = math.sin(heading)
 
-    half_length = length / 2.0
-    half_width = width / 2.0
+    half_length = length / 2
+    half_width = width / 2
 
     # Corners in vehicle frame: front-right, front-left, back-left, back-right
     local_corners = [
@@ -82,21 +82,16 @@ def check_obb_collision(corners: List[Tuple[float, float]], obstacles: np.ndarra
     return False
 
 
-# Planning constants
-PLANNED_POS_ERROR_THRESHOLD = 1.5  # m
-# PLANNED_HEADING_ERROR_THRESHOLD = math.radians(3)  # rad (deg)
-PLANNED_HEADING_ERROR_THRESHOLD = math.radians(90)  # rad (deg)
-
 pi = math.pi
 
 # Motion primitive parameters  # TODO: it would be great to smooth the trajectory
 ARC_LENGTHS = [0.75, 1.5, 3.0, 6.0]
-CURVATURES = [0.0, pi/24, -pi/24, pi/12, -pi/12, pi/6, -pi/6, pi/4, -pi/4, pi/2, -pi/2, pi, -pi]
+CURVATURES = [0.0, pi / 24, -pi / 24, pi / 12, -pi / 12, pi / 6, -pi / 6, pi / 4, -pi / 4, pi / 2, -pi / 2, pi, -pi]
 PRIMITIVE_STEPS = 10
 
 # Prefer longer arcs; TODO: don't forget to highlight in the report how essential this proved to be
 ARC_LENGTH_BIAS_WEIGHT = 2.0
-MAX_ARC_LENGTH = max(ARC_LENGTHS)  
+MAX_ARC_LENGTH = max(ARC_LENGTHS)
 
 # Discretization resolution; these are magic parameters that had to be tuned to achieve good performance.
 # Too coarse or too fine is failing the path planning.
@@ -211,7 +206,7 @@ def is_collision_free(
 ) -> bool:
     """Two-stage collision checking: cross-pattern for speed, OBB for accuracy"""
     world_size = GRID_DIMENSIONS * CELL_SIZE
-    safety_radius = vehicle_spec.width / 2.0 + VEHICLE_SAFETY_MARGIN
+    safety_radius = vehicle_spec.width / 2 + VEHICLE_SAFETY_MARGIN
 
     # Stage 1: Fast cross-pattern rejection on all points
     for pos in path_points:
@@ -253,7 +248,7 @@ def heuristic(state: Pos, goal: Pos) -> float:
     if heading_error > math.pi:
         heading_error = 2 * math.pi - heading_error
 
-    heading_penalty = heading_error * 8.0 if dist < 5.0 else heading_error * 2.0
+    heading_penalty = heading_error * 8 if dist < 5.0 else heading_error * 2
 
     return dist + heading_penalty
 
@@ -274,7 +269,7 @@ def reconstruct_path(node: SearchNode) -> List[Pos]:
         return []
 
     path = []
-    
+
     # Add all segments
     for segment in segments:
         for pos in segment:
@@ -329,9 +324,9 @@ def plan(
         dist_to_goal = current.state.distance_to(goal)
         heading_error = current.state.heading_error_to(goal)
 
-        if dist_to_goal < PLANNED_POS_ERROR_THRESHOLD and heading_error < PLANNED_HEADING_ERROR_THRESHOLD:
+        if dist_to_goal < vehicle_spec.planned_xy_error and heading_error < vehicle_spec.planned_heading_error:
             elapsed_time = time.perf_counter() - start_time  # Calculate elapsed time
-            
+
             print(f"\nPATH FOUND")
             print(f"  Planning time: {elapsed_time:.3f}s")
             print(f"  Nodes expanded: {nodes_expanded}")

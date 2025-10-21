@@ -27,7 +27,9 @@ ROBOT = VehicleSpec(
     w_max=math.pi / 2,
     track_width=0.57,  # Assumed the same as the vehicle
     origin=Pos(x=1.5, y=1.5, heading=math.pi / 2),
-    destination=Pos(x=28.7, y=34.5, heading=0.0)
+    destination=Pos(x=28.7, y=34.5, heading=0.0),
+    planned_xy_error=0.5,
+    planned_heading_error=math.radians(3)  # can be pretty precise for the tiny robot
 )
 
 CAR = VehicleSpec(
@@ -39,16 +41,18 @@ CAR = VehicleSpec(
     w_max=math.pi / 8,  # Limited turning rate
     track_width=1.8,
     origin=Pos(x=1.5, y=3.0, heading=math.pi / 2),
-    destination=Pos(x=27.0, y=34.5, heading=0.0)
+    destination=Pos(x=27.0, y=34.5, heading=0.0),
+    planned_xy_error=1.5,
+    planned_heading_error=math.radians(90)  # allow parking at a right angle for now (no reverse available)
 )
 
 """MODIFY THIS TO SET UP THE SIMULATION"""
-vehicle = Vehicle(ROBOT)
-# vehicle = Vehicle(CAR)
+# vehicle = Vehicle(ROBOT)
+vehicle = Vehicle(CAR)
 
-world = World(PARKING_LOT_1)
+# world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
-# world = World(EMPTY_PARKING_LOT)
+world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
 # Render something to look at while the path planning is running
@@ -56,6 +60,7 @@ world.clear()
 world.render_grid()
 world.render_obstacles()
 vehicle.render(world, pos=vehicle.spec.destination)  # TODO: mention using the vehicle render as the bounding box
+vehicle.render_parking_zone(world)
 vehicle.render(world)  # Render current position
 world.render_hud(message="Planning route, please wait...")
 pygame.display.flip()
@@ -93,7 +98,10 @@ while running:
     world.clear()
     world.render_grid()
     world.render_obstacles()
-    vehicle.render(world, pos=vehicle.spec.destination)  # Render destination
+
+    # Render destination
+    vehicle.render(world, pos=vehicle.spec.destination)
+    vehicle.render_parking_zone(world)
 
     if len(route) > 1:  # we actually have a route to follow
         follower.update(delta_time)
