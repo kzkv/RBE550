@@ -9,7 +9,8 @@ import math
 
 from follower import PathFollower
 from vehicle import VehicleSpec, Vehicle
-from world import World, Pos, PARKING_LOT_1, PARKING_LOT_2, EMPTY_PARKING_LOT, EMPTY_PARKING_LOT_FOR_TRAILER
+from world import World, Pos
+from world import PARKING_LOT_1, PARKING_LOT_2, PARKING_LOT_3, EMPTY_PARKING_LOT, EMPTY_PARKING_LOT_FOR_TRAILER
 from planner import plan
 
 # TODO: refactor prints into log statements
@@ -52,7 +53,8 @@ vehicle = Vehicle(CAR)
 
 # world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
-world = World(EMPTY_PARKING_LOT)
+world = World(PARKING_LOT_3)
+# world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
 # Render something to look at while the path planning is running
