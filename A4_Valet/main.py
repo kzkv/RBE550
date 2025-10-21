@@ -40,9 +40,12 @@ CAR = VehicleSpec(
     track_width=1.8
 )
 
-# ORIGIN = Pos(x=1.5, y=3.0, heading=math.pi / 2)
+# TODO: make ORIGIN/DESTINATION a part of the vehicle spec
 ORIGIN = Pos(x=1.5, y=1.5, heading=math.pi / 2)
-DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)  # TODO: IMPORTANT! Specify a bounding box instead of a point/heading
+# ORIGIN = Pos(x=3.0, y=3.0, heading=math.pi / 2)
+
+DESTINATION = Pos(x=28.7, y=34.5, heading=0.0)
+# DESTINATION = Pos(x=24.0, y=34.5, heading=0.0)
 
 vehicle = Vehicle(ROBOT, origin=ORIGIN)
 # vehicle = Vehicle(CAR, origin=ORIGIN)
@@ -51,8 +54,9 @@ vehicle = Vehicle(ROBOT, origin=ORIGIN)
 world.clear()
 world.render_grid()
 world.render_obstacles()
+vehicle.render(world, pos=DESTINATION)  # TODO: mention using the vehicle render as the bounding box
+vehicle.render(world)  # Render current position
 world.render_hud(message="Planning route, please wait...")
-vehicle.render(world)
 pygame.display.flip()
 pygame.event.pump()
 
@@ -88,6 +92,7 @@ while running:
     world.clear()
     world.render_grid()
     world.render_obstacles()
+    vehicle.render(world, pos=DESTINATION)  # Render destination
 
     if len(route) > 1:  # we actually have a route to follow
         follower.update(delta_time)
@@ -97,7 +102,7 @@ while running:
     else:
         world.render_hud(message="NO PATH FOUND!")
 
-    vehicle.render(world)
+    vehicle.render(world)  # Render current position
     vehicle.render_breadcrumbs(world)
 
     pygame.display.flip()

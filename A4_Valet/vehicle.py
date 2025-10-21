@@ -13,7 +13,7 @@ from world import World, Pos
 
 VEHICLE_BG_COLOR = (56, 67, 205)
 VEHICLE_FRONT_STRIPE_COLOR = (255, 255, 255, 180)
-DESTINATION_COLOR = (0, 255, 0)
+DESTINATION_COLOR = (90, 200, 90, 100)
 BREADCRUMB_COLOR = (255, 0, 0)
 
 
@@ -74,15 +74,24 @@ class Vehicle:
         px, py = int(self.pos.x * ppm), int(self.pos.y * ppm)
         self.breadcrumbs.append(((px, py), self._v))
 
-    def render(self, world: World):
+    def render(self, world: World, pos: Optional[Pos] = None):
+        """Render vehicle at current or specified position with optional color override"""
         ppm = world.pixels_per_meter
         Lpx = int(self.spec.length * ppm)
         Wpx = int(self.spec.width * ppm)
+        
+        # Use provided position or current position
+        if pos is not None:
+            render_pos = pos if pos is not None else self.pos
+            render_color = DESTINATION_COLOR
+        else:
+            render_pos = self.pos
+            render_color = VEHICLE_BG_COLOR
 
         surf = pygame.Surface((Lpx, Wpx), pygame.SRCALPHA)
         pygame.draw.rect(
             surf,
-            self.spec.color,
+            render_color,
             pygame.Rect(0, 0, Lpx, Wpx),
             border_radius=max(2, Wpx // 4),
         )
@@ -92,10 +101,10 @@ class Vehicle:
         pygame.draw.rect(surf, self.spec.front_stripe_color, (stripe_x, 4, stripe_w, Wpx - 8), border_radius=2)
 
         # rotate to the current heading
-        rotated = pygame.transform.rotate(surf, -math.degrees(self.pos.heading))
+        rotated = pygame.transform.rotate(surf, -math.degrees(render_pos.heading))
 
-        px = int(self.pos.x * ppm)
-        py = int(self.pos.y * ppm)
+        px = int(render_pos.x * ppm)
+        py = int(render_pos.y * ppm)
         rect = rotated.get_rect(center=(px, py))
         world.screen.blit(rotated, rect.topleft)
 
