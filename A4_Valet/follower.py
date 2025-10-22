@@ -123,13 +123,14 @@ class PathFollower:
             w = math.copysign(w_cap, w)  # keep the sign, but clamp
         # TODO: consider checking each wheels individually to avoid any corner cases
 
-        # Are we there yet?
-        left_to_go = self.vehicle.pos.distance_to(self.destination)
-        if left_to_go <= BRAKING_DISTANCE:
-            scale = max(0.0, left_to_go / BRAKING_DISTANCE)
+        # Braking as we approach the end of the path
+        distance_to_path_end = self.total_arc_length - self.traveled
+        if distance_to_path_end <= BRAKING_DISTANCE:
+            scale = max(0.0, distance_to_path_end / BRAKING_DISTANCE)
             v *= scale
 
-        if left_to_go <= POS_ERROR_THRESHOLD:
+        # Stop when very close to the end of the trajectory
+        if distance_to_path_end <= POS_ERROR_THRESHOLD:
             self.we_are_there = True
             v, w = 0.0, 0.0
 

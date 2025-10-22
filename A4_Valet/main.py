@@ -53,9 +53,9 @@ vehicle = Vehicle(CAR)
 
 # world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
-world = World(PARKING_LOT_3)
+# world = World(PARKING_LOT_3)
 # world = World(PARKING_LOT_4)
-# world = World(EMPTY_PARKING_LOT)
+world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
 # Render something to look at while the path planning is running
@@ -109,7 +109,7 @@ while running:
     if len(route) > 1:  # we actually have a route to follow
         follower.update(delta_time)
         vehicle.drive(delta_time, world)
-        world.render_hud(vehicle_location=vehicle.pos)
+        world.render_hud(vehicle_location=vehicle.pos, destination=vehicle.spec.destination)
         world.render_route(full_route)
     else:
         world.render_hud(message="NO PATH FOUND!")
