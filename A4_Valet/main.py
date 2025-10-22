@@ -10,7 +10,7 @@ import math
 from follower import PathFollower
 from vehicle import VehicleSpec, Vehicle
 from world import World, Pos
-from world import PARKING_LOT_1, PARKING_LOT_2, PARKING_LOT_3, EMPTY_PARKING_LOT, EMPTY_PARKING_LOT_FOR_TRAILER
+from world import PARKING_LOT_1, PARKING_LOT_2, PARKING_LOT_3, PARKING_LOT_4, EMPTY_PARKING_LOT, EMPTY_PARKING_LOT_FOR_TRAILER
 from planner import plan
 
 # TODO: refactor prints into log statements
@@ -38,13 +38,13 @@ CAR = VehicleSpec(
     width=1.8,
     wheelbase=2.8,
     cargo_manifest="Donuts",
-    cruising_velocity=8.0,  # The donut carrier is faster than the burrito carrier
-    w_max=math.pi / 8,  # Limited turning rate
+    cruising_velocity=6.0,  # The donut carrier is faster than the burrito carrier
+    w_max=math.pi / 4,  # Limited turning rate
     track_width=1.8,
     origin=Pos(x=1.5, y=3.0, heading=math.pi / 2),
     destination=Pos(x=27.0, y=34.5, heading=0.0),
-    planned_xy_error=1.5,
-    planned_heading_error=math.radians(90)  # allow parking at a right angle for now (no reverse available)
+    planned_xy_error=1.0,
+    planned_heading_error=math.radians(10)  # a looser parked heading requirement
 )
 
 """MODIFY THIS TO SET UP THE SIMULATION"""
@@ -54,6 +54,7 @@ vehicle = Vehicle(CAR)
 # world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
 world = World(PARKING_LOT_3)
+# world = World(PARKING_LOT_4)
 # world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 

@@ -25,6 +25,29 @@ from world import CELL_SIZE
 from world import Pos, world_to_grid, GRID_DIMENSIONS
 from vehicle import VehicleSpec
 
+pi = math.pi
+
+# Motion primitive parameters  # TODO: it would be great to smooth the trajectory
+ARC_LENGTHS = [0.3, 0.75, 1.5, 3.0, 6.0]
+CURVATURES = [0.0, pi / 24, -pi / 24, pi / 12, -pi / 12, pi / 6, -pi / 6, pi / 4, -pi / 4, pi / 2, -pi / 2, pi, -pi]
+PRIMITIVE_STEPS = 10
+
+# Prefer longer arcs; TODO: don't forget to highlight in the report how essential this proved to be
+ARC_LENGTH_BIAS_WEIGHT = 2.0
+MAX_ARC_LENGTH = max(ARC_LENGTHS)
+
+# Discretization resolution; these are magic parameters that had to be tuned to achieve good performance.
+# Too coarse or too fine is failing the path planning.
+XY_RESOLUTION = 0.75
+THETA_RESOLUTION = math.pi / 6  # ~30 deg
+
+# Safety margins
+VEHICLE_SAFETY_MARGIN = 0.1  # m
+
+# A* search limits
+MAX_ITERATIONS = 30000
+PROGRESS_INTERVAL = 1000
+
 
 def get_obb_corners(x: float, y: float, heading: float, length: float, width: float) -> List[Tuple[float, float]]:
     """Compute the four corners of an oriented bounding box"""
@@ -80,30 +103,6 @@ def check_obb_collision(corners: List[Tuple[float, float]], obstacles: np.ndarra
                 return True
 
     return False
-
-
-pi = math.pi
-
-# Motion primitive parameters  # TODO: it would be great to smooth the trajectory
-ARC_LENGTHS = [0.75, 1.5, 3.0, 6.0]
-CURVATURES = [0.0, pi / 24, -pi / 24, pi / 12, -pi / 12, pi / 6, -pi / 6, pi / 4, -pi / 4, pi / 2, -pi / 2, pi, -pi]
-PRIMITIVE_STEPS = 10
-
-# Prefer longer arcs; TODO: don't forget to highlight in the report how essential this proved to be
-ARC_LENGTH_BIAS_WEIGHT = 2.0
-MAX_ARC_LENGTH = max(ARC_LENGTHS)
-
-# Discretization resolution; these are magic parameters that had to be tuned to achieve good performance.
-# Too coarse or too fine is failing the path planning.
-XY_RESOLUTION = 0.75
-THETA_RESOLUTION = math.pi / 6  # ~30 deg
-
-# Safety margins
-VEHICLE_SAFETY_MARGIN = 0.2  # m
-
-# A* search limits
-MAX_ITERATIONS = 30000
-PROGRESS_INTERVAL = 1000
 
 
 @dataclass

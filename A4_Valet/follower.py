@@ -43,7 +43,6 @@ class PathFollower:
 
         self.traveled = 0.0
         self.we_are_there = False
-        self._v_last = 0.0
         self.destination = route[-1]
 
     def _interpolate_at(self, arclength: float) -> Tuple[float, float]:
@@ -70,8 +69,25 @@ class PathFollower:
         """Compute (v, w) and command the vehicle"""
         # TODO: take into account track width
 
-        # Advance nominal path progress; clamp to total arc length
-        self.traveled = min(self.traveled + max(0.0, self._v_last) * delta_time, self.total_arc_length)
+        # Update traveled distance based on actual vehicle position along path
+        min_dist = None
+        closest_s = self.traveled
+        
+        # Search around current traveled position for closest point
+        search_start = max(0.0, self.traveled - self.lookahead)
+        search_end = min(self.total_arc_length, self.traveled + self.lookahead)
+        
+        # Sample points along the path
+        samples = 20
+        for i in range(samples + 1):
+            s = search_start + (search_end - search_start) * i / samples
+            px, py = self._interpolate_at(s)
+            dist = math.hypot(px - self.vehicle.pos.x, py - self.vehicle.pos.y)
+            if min_dist is None or dist < min_dist:
+                min_dist = dist
+                closest_s = s
+        
+        self.traveled = closest_s
 
         # Lookahead target point (clamped)
         target_s = min(self.traveled + self.lookahead, self.total_arc_length)
@@ -119,4 +135,3 @@ class PathFollower:
 
         # TODO: the follower never commands going in reverse, but it could be useful
         self.vehicle.set_velocities(v, w)
-        self._v_last = v
