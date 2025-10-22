@@ -119,8 +119,9 @@ class Vehicle:
 
     def render_parking_zone(self, world):
         """
-        Render acceptable parking zone as a circle. I'm using a liberal interpretation of
+        Render an acceptable parking zone as a circle. I'm using a liberal interpretation of
         "the exact boundary of this goal box is at your discretion" from the assignment.
+        I like the circular box because it's so much easier to render than a rectangle.
         """
 
         ppm = world.pixels_per_meter
