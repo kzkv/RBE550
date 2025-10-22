@@ -197,7 +197,7 @@ class World:
                     r = pygame.Rect(x * s, y * s, s, s)
                     pygame.draw.rect(self.screen, OBSTACLE_BG_COLOR, r)
 
-    def render_hud(self, vehicle_location: Pos = None, message: str = ""):
+    def render_hud(self, vehicle_location: Pos = None, destination: Pos = None, message: str = ""):
         text = message
 
         mx, my = pygame.mouse.get_pos()
@@ -211,7 +211,12 @@ class World:
         if vehicle_location:
             cursor_location_string = f"{x:04.1f}, {y:04.1f} (row/col {row:02d}, {col:02d})"
             vehicle_location_string = f"{vehicle_location.x:04.1f}, {vehicle_location.y:04.1f}"
-            text = f"Cursor: {cursor_location_string}   Vehicle: {vehicle_location_string}   {message}"
+            
+            xy_error = vehicle_location.distance_to(destination)
+            heading_error = vehicle_location.heading_error_to(destination)
+            error_string = f"   Errors: XY {xy_error:.2f}m, heading {math.degrees(heading_error):.1f}°"
+            
+            text = f"Cursor: {cursor_location_string}   Vehicle: {vehicle_location_string}{error_string}   {message}"
 
         img = self.font.render(text, True, HUD_FONT_COLOR)
 

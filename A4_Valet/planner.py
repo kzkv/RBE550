@@ -48,6 +48,8 @@ VEHICLE_SAFETY_MARGIN = 0.1  # m
 MAX_ITERATIONS = 30000
 PROGRESS_INTERVAL = 1000
 
+PATH_EXTENSION = 0.25
+
 
 def get_obb_corners(x: float, y: float, heading: float, length: float, width: float) -> List[Tuple[float, float]]:
     """Compute the four corners of an oriented bounding box"""
@@ -175,10 +177,14 @@ class StateKey:
     @staticmethod
     def from_pos(pos: Pos) -> 'StateKey':
         """Create a discretized state key"""
+        # Wrap heading to [-pi, pi] before discretization to ensure
+        # equivalent headings map to the same bucket
+        wrapped_heading = (pos.heading + math.pi) % (2 * math.pi) - math.pi
+        
         return StateKey(
             x=round(pos.x / XY_RESOLUTION) * XY_RESOLUTION,
             y=round(pos.y / XY_RESOLUTION) * XY_RESOLUTION,
-            theta=round(pos.heading / THETA_RESOLUTION) * THETA_RESOLUTION
+            theta=round(wrapped_heading / THETA_RESOLUTION) * THETA_RESOLUTION
         )
 
     def __hash__(self):
@@ -269,12 +275,28 @@ def reconstruct_path(node: SearchNode) -> List[Pos]:
 
     path = []
 
-    # Add all segments
+    # Add all segments, wrapping headings to ensure consistency
     for segment in segments:
         for pos in segment:
-            if path and pos.distance_to(path[-1]) < 0.1:
-                continue
-            path.append(pos)
+            # Wrap the heading to [-pi, pi] before adding to path
+            wrapped_heading = (pos.heading + math.pi) % (2 * math.pi) - math.pi
+            path.append(Pos(pos.x, pos.y, wrapped_heading))
+
+    # Replace the last waypoint with the actual goal node state
+    # This ensures the heading matches what the planner verified against the goal
+    if path and node.state:
+        path[-1] = Pos(node.state.x, node.state.y, node.state.heading)
+    
+    # Add a small extension segment in the direction of final heading
+    # This helps Pure Pursuit track the final heading without instability
+    # TODO: explain the shenanigans happening here in the report
+    if path:
+        final_waypoint = path[-1]
+        extension_length = PATH_EXTENSION
+        extended_x = final_waypoint.x + extension_length * math.cos(final_waypoint.heading)
+        extended_y = final_waypoint.y + extension_length * math.sin(final_waypoint.heading)
+        extension_point = Pos(extended_x, extended_y, final_waypoint.heading)
+        path.append(extension_point)
 
     return path
 
@@ -335,6 +357,18 @@ def plan(
 
             path = reconstruct_path(current)
             print(f"  Reconstructed {len(path)} waypoints")
+            
+            # Debug: Show the discrepancy between goal and final waypoint
+            if path:
+                final_waypoint = path[-1]
+                final_xy_error = final_waypoint.distance_to(goal)
+                final_heading_error = final_waypoint.heading_error_to(goal)
+                print(f"\n  Final waypoint vs goal:")
+                print(f"    Goal heading: {math.degrees(goal.heading):.3f}°")
+                print(f"    Final waypoint heading: {math.degrees(final_waypoint.heading):.3f}°")
+                print(f"    XY error: {final_xy_error:.3f}m")
+                print(f"    Heading error: {math.degrees(final_heading_error):.3f}°")
+            
             return path
 
         # Expand neighbors
