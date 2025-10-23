@@ -28,6 +28,7 @@ class VehicleSpec:
     w_max: float  # rad/s
     origin: Pos
     destination: Pos
+    safety_margin: float
     planned_xy_error: float
     planned_heading_error: float
     color: Tuple[int, int, int] = VEHICLE_BG_COLOR
@@ -84,7 +85,7 @@ class Vehicle:
         Lpx = int(self.spec.length * ppm)
         Wpx = int(self.spec.width * ppm)
         
-        # Use provided position or current position
+        # Use the provided position or current position
         if pos is not None:
             render_pos = pos if pos is not None else self.pos
             render_color = DESTINATION_COLOR
@@ -128,7 +129,7 @@ class Vehicle:
         dest_px = int(self.spec.destination.x * ppm)
         dest_py = int(self.spec.destination.y * ppm)
 
-        # Radius is xy_error + furthest corner of vehicle from its center
+        # Radius is xy_error + the furthest corner of the vehicle from its center
         vehicle_corner_distance = math.hypot(self.spec.length / 2, self.spec.width / 2)
         radius = self.spec.planned_xy_error + vehicle_corner_distance
         radius_px = int(radius * ppm)

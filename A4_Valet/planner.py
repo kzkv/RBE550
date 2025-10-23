@@ -17,12 +17,11 @@ import math
 import heapq
 import time
 from typing import List, Tuple, Optional, Set
-import numpy as np
 from dataclasses import dataclass, field
 from itertools import product
 
-from world import CELL_SIZE
-from world import Pos, world_to_grid, GRID_DIMENSIONS
+from collision import CollisionChecker
+from world import Pos
 from vehicle import VehicleSpec
 
 pi = math.pi
@@ -41,68 +40,9 @@ MAX_ARC_LENGTH = max(ARC_LENGTHS)
 XY_RESOLUTION = 0.75
 THETA_RESOLUTION = math.pi / 6  # ~30 deg
 
-# Safety margins
-VEHICLE_SAFETY_MARGIN = 0.1  # m
-
 # A* search limits
 MAX_ITERATIONS = 30000
 PROGRESS_INTERVAL = 1000
-
-
-def get_obb_corners(x: float, y: float, heading: float, length: float, width: float) -> List[Tuple[float, float]]:
-    """Compute the four corners of an oriented bounding box"""
-    cos_h = math.cos(heading)
-    sin_h = math.sin(heading)
-
-    half_length = length / 2
-    half_width = width / 2
-
-    # Corners in vehicle frame: front-right, front-left, back-left, back-right
-    local_corners = [
-        (half_length, half_width),
-        (half_length, -half_width),
-        (-half_length, -half_width),
-        (-half_length, half_width),
-    ]
-
-    # Transform to world frame
-    world_corners = []
-    for lx, ly in local_corners:
-        wx = x + lx * cos_h - ly * sin_h
-        wy = y + lx * sin_h + ly * cos_h
-        world_corners.append((wx, wy))
-
-    return world_corners
-
-
-def check_obb_collision(corners: List[Tuple[float, float]], obstacles: np.ndarray) -> bool:
-    """Check if any corner or edge of OBB collides with obstacles"""
-    # Check all four corners
-    for cx, cy in corners:
-        row, col = world_to_grid(cx, cy)
-        if row < 0 or row >= GRID_DIMENSIONS or col < 0 or col >= GRID_DIMENSIONS:
-            return True  # Out of bounds
-        if obstacles[row, col]:
-            return True  # Corner in an obstacle cell
-
-    # Check edges by sampling points between corners
-    num_samples = 3  # Sample points per edge
-    for i in range(4):
-        c1 = corners[i]
-        c2 = corners[(i + 1) % 4]
-
-        for j in range(1, num_samples):
-            t = j / num_samples
-            ex = c1[0] + t * (c2[0] - c1[0])
-            ey = c1[1] + t * (c2[1] - c1[1])
-
-            row, col = world_to_grid(ex, ey)
-            if row < 0 or row >= GRID_DIMENSIONS or col < 0 or col >= GRID_DIMENSIONS:
-                return True
-            if obstacles[row, col]:
-                return True
-
-    return False
 
 
 @dataclass
@@ -202,44 +142,6 @@ class SearchNode:
     path_segment: List[Pos] = field(default_factory=list, compare=False)  # Store Pos objects
 
 
-def is_collision_free(
-        path_points: List[Pos],
-        obstacles: np.ndarray,
-        vehicle_spec: VehicleSpec,
-        collision_checker,
-) -> bool:
-    """
-    Three-tier collision checking:
-    1. Loose overlay (conservative) - instant approval if clear
-    2. Tight overlay (optimistic) - instant rejection if collision
-    3. OBB check - precise validation for ambiguous cases
-    """
-    obb_check_needed = []
-
-    for pos in path_points:
-        # Tier 1: Loose overlay check (conservative radius)
-        if not collision_checker.check_loose(pos):
-            # Definitely safe - no collision in worst case
-            continue
-
-        # Tier 2: Tight overlay check (optimistic radius)
-        if collision_checker.check_tight(pos):
-            # Definitely collides - even best-case alignment hits obstacle
-            return False
-
-        # Tier 3: Ambiguous - needs precise OBB check
-        obb_check_needed.append(pos)
-
-    # Perform OBB checks only for ambiguous points
-    for pos in obb_check_needed:
-        corners = get_obb_corners(pos.x, pos.y, pos.heading,
-                                  vehicle_spec.length, vehicle_spec.width)
-        if check_obb_collision(corners, obstacles):
-            return False
-
-    return True
-
-
 def heuristic(state: Pos, goal: Pos) -> float:
     """Heuristic with strong heading awareness near goal."""
     dist = math.hypot(state.x - goal.x, state.y - goal.y)
@@ -254,7 +156,7 @@ def heuristic(state: Pos, goal: Pos) -> float:
 
 
 def reconstruct_path(node: SearchNode) -> List[Pos]:
-    """Reconstruct the path from goal back to start"""
+    """Reconstruct the path from destination back to start"""
     segments = []
     current = node
 
@@ -273,32 +175,25 @@ def reconstruct_path(node: SearchNode) -> List[Pos]:
     # Add all segments, wrapping headings to ensure consistency
     for segment in segments:
         for pos in segment:
-            # Wrap the heading to [-pi, pi] before adding to path
+            # Wrap the heading to [-pi, pi] before adding to the path
             wrapped_heading = (pos.heading + math.pi) % (2 * math.pi) - math.pi
             path.append(Pos(pos.x, pos.y, wrapped_heading))
-
-    # # Replace the last waypoint with the actual goal node state
-    # # This ensures the heading matches what the planner verified against the goal
-    # if path and node.state:
-    #     path[-1] = Pos(node.state.x, node.state.y, node.state.heading)
 
     return path
 
 
 def plan(
-        origin: Pos,
-        goal: Pos,
-        obstacles: np.ndarray,
         vehicle_spec: VehicleSpec,
-        collision_checker,  # Required CollisionChecker instance
+        collision_checker: CollisionChecker,
 ) -> Optional[List[Pos]]:
     """A* path planning with fast overlay-based collision checking"""
-
     start_time = time.perf_counter()
+    origin = vehicle_spec.origin
+    destination = vehicle_spec.destination
 
     print(f"\nA* Path Planning")
     print(f"  Origin: ({origin.x:.2f}, {origin.y:.2f}, {math.degrees(origin.heading):.0f}°)")
-    print(f"  Goal:   ({goal.x:.2f}, {goal.y:.2f}, {math.degrees(goal.heading):.0f}°)")
+    print(f"  Destination:   ({destination.x:.2f}, {destination.y:.2f}, {math.degrees(destination.heading):.0f}°)")
     print(f"  Vehicle: {vehicle_spec.length:.2f}m long × {vehicle_spec.width:.2f}m wide")
 
     primitives = create_motion_primitives()
@@ -308,7 +203,7 @@ def plan(
     visited: Set[StateKey] = set()
 
     start_node = SearchNode(
-        f_score=heuristic(origin, goal),
+        f_score=heuristic(origin, destination),
         state=origin,
         g_score=0.0,
         path_segment=[origin]
@@ -327,10 +222,10 @@ def plan(
         visited.add(current_key)
         nodes_expanded += 1
 
-        dist_to_goal = current.state.distance_to(goal)
-        heading_error = current.state.heading_error_to(goal)
+        dist_to_destination = current.state.distance_to(destination)
+        heading_error = current.state.heading_error_to(destination)
 
-        if dist_to_goal < vehicle_spec.planned_xy_error and heading_error < vehicle_spec.planned_heading_error:
+        if dist_to_destination < vehicle_spec.planned_xy_error and heading_error < vehicle_spec.planned_heading_error:
             elapsed_time = time.perf_counter() - start_time
 
             print(f"\nPATH FOUND")
@@ -338,17 +233,17 @@ def plan(
             print(f"  Nodes expanded: {nodes_expanded}")
             print(f"  Nodes per second: {nodes_expanded / elapsed_time:.0f}")
             print(f"  Path cost: {current.g_score:.1f}m")
-            print(f"  Final error: {dist_to_goal:.2f}m, {math.degrees(heading_error):.1f}°")
+            print(f"  Final error: {dist_to_destination:.2f}m, {math.degrees(heading_error):.1f}°")
 
             path = reconstruct_path(current)
             print(f"  Reconstructed {len(path)} waypoints")
 
             if path:
                 final_waypoint = path[-1]
-                final_xy_error = final_waypoint.distance_to(goal)
-                final_heading_error = final_waypoint.heading_error_to(goal)
-                print(f"\n  Final waypoint vs goal:")
-                print(f"    Goal heading: {math.degrees(goal.heading):.3f}°")
+                final_xy_error = final_waypoint.distance_to(destination)
+                final_heading_error = final_waypoint.heading_error_to(destination)
+                print(f"\n  Final waypoint vs destination:")
+                print(f"    Destination heading: {math.degrees(destination.heading):.3f}°")
                 print(f"    Final waypoint heading: {math.degrees(final_waypoint.heading):.3f}°")
                 print(f"    XY error: {final_xy_error:.3f}m")
                 print(f"    Heading error: {math.degrees(final_heading_error):.3f}°")
@@ -363,13 +258,13 @@ def plan(
             if new_key in visited:
                 continue
 
-            if not is_collision_free(path_segment, obstacles, vehicle_spec, collision_checker):
+            if not collision_checker.is_path_collision_free(path_segment):
                 continue
 
             arc_bias_penalty = ARC_LENGTH_BIAS_WEIGHT * (1.0 - primitive.arc_length / MAX_ARC_LENGTH)
 
             g_score = current.g_score + abs(primitive.arc_length) + arc_bias_penalty
-            f_score = g_score + heuristic(new_state, goal)
+            f_score = g_score + heuristic(new_state, destination)
 
             neighbor = SearchNode(
                 f_score=f_score,

@@ -65,7 +65,7 @@ class PathFollower:
         return (p0.x + segment_fraction * (p1.x - p0.x),
                 p0.y + segment_fraction * (p1.y - p0.y))
 
-    def update(self, delta_time: float):
+    def update(self):
         """Compute (v, w) and command the vehicle"""
         # TODO: take into account track width
 

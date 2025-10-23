@@ -31,6 +31,7 @@ ROBOT = VehicleSpec(
     track_width=0.57,  # Assumed the same as the vehicle
     origin=Pos(x=1.5, y=1.5, heading=math.pi / 2),
     destination=Pos(x=28.7, y=34.5, heading=0.0),
+    safety_margin=0.1,
     planned_xy_error=0.5,
     planned_heading_error=math.radians(3)  # can be pretty precise for the tiny robot
 )
@@ -45,6 +46,7 @@ CAR = VehicleSpec(
     track_width=1.8,
     origin=Pos(x=1.5, y=3.0, heading=math.pi / 2),
     destination=Pos(x=27.0, y=34.5, heading=0.0),
+    safety_margin=0.1,
     planned_xy_error=1.0,
     planned_heading_error=math.radians(90)  # a looser parked heading requirement
 )
@@ -82,7 +84,7 @@ world.render_hud(message="Planning route, please wait...")
 pygame.display.flip()
 pygame.event.pump()
 
-route = plan(vehicle.spec.origin, vehicle.spec.destination, world.obstacles, vehicle.spec, collision)
+route = plan(vehicle.spec, collision)
 
 if route is None:
     print("NO PATH FOUND!")
@@ -124,7 +126,7 @@ while running:
         collision.render_tight_overlay()
 
     if len(route) > 1:  # we actually have a route to follow
-        follower.update(delta_time)
+        follower.update()
         vehicle.drive(delta_time, world)
         world.render_hud(vehicle_location=vehicle.pos, destination=vehicle.spec.destination)
         world.render_route(full_route)
