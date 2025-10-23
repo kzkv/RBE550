@@ -208,40 +208,37 @@ def is_collision_free(
         path_points: List[Pos],
         obstacles: np.ndarray,
         vehicle_spec: VehicleSpec,
+        collision_checker,  
 ) -> bool:
-    """Two-stage collision checking: cross-pattern for speed, OBB for accuracy"""
-    world_size = GRID_DIMENSIONS * CELL_SIZE
-    safety_radius = vehicle_spec.width / 2 + VEHICLE_SAFETY_MARGIN
-
-    # Stage 1: Fast cross-pattern rejection on all points
+    """
+    Three-tier collision checking:
+    1. Loose overlay (conservative) - instant approval if clear
+    2. Tight overlay (optimistic) - instant rejection if collision
+    3. OBB check - precise validation for ambiguous cases
+    """
+    obb_check_needed = []
+    
     for pos in path_points:
-        # Boundary check
-        if (pos.x < safety_radius or pos.y < safety_radius or
-                pos.x >= world_size - safety_radius or pos.y >= world_size - safety_radius):
+        # Tier 1: Loose overlay check (conservative radius)
+        if not collision_checker.check_loose(pos):
+            # Definitely safe - no collision in worst case
+            continue
+        
+        # Tier 2: Tight overlay check (optimistic radius)
+        if collision_checker.check_tight(pos):
+            # Definitely collides - even best-case alignment hits obstacle
             return False
-
-        # Quick cross-pattern check (center + 4 cardinal points)
-        check_points = [
-            (pos.x, pos.y),
-            (pos.x + safety_radius, pos.y),
-            (pos.x - safety_radius, pos.y),
-            (pos.x, pos.y + safety_radius),
-            (pos.x, pos.y - safety_radius),
-        ]
-
-        for cx, cy in check_points:
-            row, col = world_to_grid(cx, cy)
-            if row < 0 or row >= GRID_DIMENSIONS or col < 0 or col >= GRID_DIMENSIONS:
-                return False
-            if obstacles[row, col]:
-                return False
-
-    # Stage 2: Precise OBB validation - check all points
-    for pos in path_points:
-        corners = get_obb_corners(pos.x, pos.y, pos.heading, vehicle_spec.length, vehicle_spec.width)
+        
+        # Tier 3: Ambiguous - needs precise OBB check
+        obb_check_needed.append(pos)
+    
+    # Perform OBB checks only for ambiguous points
+    for pos in obb_check_needed:
+        corners = get_obb_corners(pos.x, pos.y, pos.heading, 
+                                 vehicle_spec.length, vehicle_spec.width)
         if check_obb_collision(corners, obstacles):
             return False
-
+    
     return True
 
 
@@ -306,10 +303,11 @@ def plan(
         goal: Pos,
         obstacles: np.ndarray,
         vehicle_spec: VehicleSpec,
+        collision_checker,  # Required CollisionChecker instance
 ) -> Optional[List[Pos]]:
-    """A* path planning with OBB collision checking"""
+    """A* path planning with fast overlay-based collision checking"""
 
-    start_time = time.perf_counter()  # Start timing
+    start_time = time.perf_counter()
 
     print(f"\nA* Path Planning")
     print(f"  Origin: ({origin.x:.2f}, {origin.y:.2f}, {math.degrees(origin.heading):.0f}°)")
@@ -346,7 +344,7 @@ def plan(
         heading_error = current.state.heading_error_to(goal)
 
         if dist_to_goal < vehicle_spec.planned_xy_error and heading_error < vehicle_spec.planned_heading_error:
-            elapsed_time = time.perf_counter() - start_time  # Calculate elapsed time
+            elapsed_time = time.perf_counter() - start_time
 
             print(f"\nPATH FOUND")
             print(f"  Planning time: {elapsed_time:.3f}s")
@@ -358,7 +356,6 @@ def plan(
             path = reconstruct_path(current)
             print(f"  Reconstructed {len(path)} waypoints")
             
-            # Debug: Show the discrepancy between goal and final waypoint
             if path:
                 final_waypoint = path[-1]
                 final_xy_error = final_waypoint.distance_to(goal)
@@ -379,12 +376,9 @@ def plan(
             if new_key in visited:
                 continue
 
-            if not is_collision_free(path_segment, obstacles, vehicle_spec):
+            if not is_collision_free(path_segment, obstacles, vehicle_spec, collision_checker):
                 continue
 
-            # Bias towards longer arcs by penalizing shorter ones
-            # Penalty is inversely proportional to arc length
-            # Normalized by MAX_ARC_LENGTH, so the penalty is between 0 and ARC_LENGTH_BIAS_WEIGHT
             arc_bias_penalty = ARC_LENGTH_BIAS_WEIGHT * (1.0 - primitive.arc_length / MAX_ARC_LENGTH)
 
             g_score = current.g_score + abs(primitive.arc_length) + arc_bias_penalty

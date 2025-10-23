@@ -14,7 +14,7 @@ rng = np.random.default_rng()
 
 # Fundamental constants
 GRID_DIMENSIONS = 12
-CELL_SIZE = 3  # 3 meters per cell
+CELL_SIZE = 3.0  # 3 meters per cell
 PIXELS_PER_METER = 40
 
 CELL_BG_COLOR = (255, 255, 255)
@@ -163,6 +163,7 @@ def pixel_to_world(px, py):
 class World:
     def __init__(self, obstacles):
         self.grid_dimensions = GRID_DIMENSIONS
+        self.cell_size = CELL_SIZE
         self.pixels_per_meter = PIXELS_PER_METER
         self.cell_dimensions = CELL_SIZE * self.pixels_per_meter
         self.field_dimensions = self.grid_dimensions * self.cell_dimensions

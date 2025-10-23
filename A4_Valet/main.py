@@ -7,10 +7,12 @@ import pygame
 import numpy as np
 import math
 
+from collision import CollisionChecker
 from follower import PathFollower
 from vehicle import VehicleSpec, Vehicle
 from world import World, Pos
-from world import PARKING_LOT_1, PARKING_LOT_2, PARKING_LOT_3, PARKING_LOT_4, EMPTY_PARKING_LOT, EMPTY_PARKING_LOT_FOR_TRAILER
+from world import PARKING_LOT_1, PARKING_LOT_2, PARKING_LOT_3, PARKING_LOT_4, EMPTY_PARKING_LOT, \
+    EMPTY_PARKING_LOT_FOR_TRAILER
 from planner import plan
 
 # TODO: refactor prints into log statements
@@ -58,6 +60,11 @@ vehicle = Vehicle(CAR)
 world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
+RENDER_OVERLAY = True
+""""""
+
+collision = CollisionChecker(world, vehicle.spec)
+
 # Render something to look at while the path planning is running
 world.clear()
 world.render_grid()
@@ -65,11 +72,17 @@ world.render_obstacles()
 vehicle.render(world, pos=vehicle.spec.destination)  # TODO: mention using the vehicle render as the bounding box
 vehicle.render_parking_zone(world)
 vehicle.render(world)  # Render current position
+
+if RENDER_OVERLAY:
+    collision.render_loose_overlay()
+    collision.render_tight_overlay()
+
 world.render_hud(message="Planning route, please wait...")
+
 pygame.display.flip()
 pygame.event.pump()
 
-route = plan(vehicle.spec.origin, vehicle.spec.destination, world.obstacles, vehicle.spec)
+route = plan(vehicle.spec.origin, vehicle.spec.destination, world.obstacles, vehicle.spec, collision)
 
 if route is None:
     print("NO PATH FOUND!")
@@ -105,6 +118,10 @@ while running:
     # Render destination
     vehicle.render(world, pos=vehicle.spec.destination)
     vehicle.render_parking_zone(world)
+
+    if RENDER_OVERLAY:
+        collision.render_loose_overlay()
+        collision.render_tight_overlay()
 
     if len(route) > 1:  # we actually have a route to follow
         follower.update(delta_time)
