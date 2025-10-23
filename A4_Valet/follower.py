@@ -109,19 +109,36 @@ class PathFollower:
         else:
             kappa = 2 * y_frame / d_squared  # turn sharpness
 
+        # Compute kinematic-specific limits
+        from vehicle import KinematicModel
+        if self.vehicle.spec.kinematic_model == KinematicModel.ACKERMANN:
+            kappa_max = math.tan(self.vehicle.spec.max_steering_angle) / self.vehicle.spec.wheelbase
+            kappa = max(-kappa_max, min(kappa_max, kappa))
+            w_max_at_cruise = self.vehicle.spec.cruising_velocity * kappa_max
+        else:
+            # For diff-drive: use the specified w_max
+            w_max_at_cruise = self.vehicle.spec.w_max
+
         # Clamp velocity: keep cruise unless curvature forces a limit
         # TODO: consider clamping centripetal acceleration too? IRL this can cause rolling over on uneven pavement
-        v_limit_turn = self.vehicle.spec.w_max / max(1e-6, abs(kappa))
+        v_limit_turn = w_max_at_cruise / max(1e-6, abs(kappa))
         v = min(self.vehicle.spec.cruising_velocity, v_limit_turn)
 
         w = v * kappa
 
-        # clamp rotation based on the individual wheel speed
-        # |w| <= 2/track_width * (wheel_speed_max - |v|); thanks again, ChatGPT
-        w_cap = (2.0 / self.vehicle.spec.track_width) * max(0.0, self.wheel_speed_max - abs(v))
-        if abs(w) > w_cap:
-            w = math.copysign(w_cap, w)  # keep the sign, but clamp
-        # TODO: consider checking each wheels individually to avoid any corner cases
+        # Apply kinematic-specific constraints
+        if self.vehicle.spec.kinematic_model == KinematicModel.DIFF_DRIVE:
+            # Clamp rotation based on the individual wheel speed for diff-drive
+            # |w| <= 2/track_width * (wheel_speed_max - |v|); thanks again, ChatGPT
+            w_cap = (2.0 / self.vehicle.spec.track_width) * max(0.0, self.wheel_speed_max - abs(v))
+            if abs(w) > w_cap:
+                w = math.copysign(w_cap, w)  # keep the sign, but clamp
+            # TODO: consider checking each wheels individually to avoid any corner cases
+        else:
+            # For Ackermann: constrain angular velocity based on current speed and max steering
+            if abs(v) > 1e-6:
+                w_max_current = abs(v) * math.tan(self.vehicle.spec.max_steering_angle) / self.vehicle.spec.wheelbase
+                w = max(-w_max_current, min(w_max_current, w))
 
         # Braking as we approach the end of the path
         distance_to_path_end = self.total_arc_length - self.traveled

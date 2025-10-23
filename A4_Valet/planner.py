@@ -28,7 +28,7 @@ pi = math.pi
 
 # Motion primitive parameters  # TODO: it would be great to smooth the trajectory
 ARC_LENGTHS = [0.3, 0.75, 1.5, 3.0, 6.0]
-CURVATURES = [0.0, pi / 24, -pi / 24, pi / 12, -pi / 12, pi / 6, -pi / 6, pi / 4, -pi / 4, pi / 2, -pi / 2, pi, -pi]
+CURVATURES = [0.0, pi / 24, -pi / 24, pi / 12, -pi / 12, pi / 6, -pi / 6]
 PRIMITIVE_STEPS = 10
 
 # Prefer longer arcs; TODO: don't forget to highlight in the report how essential this proved to be
@@ -94,11 +94,21 @@ class MotionPrimitive:
         return end_state, path_points
 
 
-def create_motion_primitives() -> List[MotionPrimitive]:
+def create_motion_primitives(vehicle_spec: VehicleSpec) -> List[MotionPrimitive]:
     """Generate all motion primitive combinations"""
+    from vehicle import KinematicModel
+    
+    if vehicle_spec.kinematic_model == KinematicModel.ACKERMANN:
+        # For Ackermann: filter curvatures to respect max steering angle
+        kappa_max = math.tan(vehicle_spec.max_steering_angle) / vehicle_spec.wheelbase
+        curvatures = [k for k in CURVATURES if abs(k) <= kappa_max]
+    else:
+        # For diff-drive: use the original curvature set
+        curvatures = CURVATURES
+    
     return [
         MotionPrimitive(arc_length=length, curvature=curvature)
-        for length, curvature in product(ARC_LENGTHS, CURVATURES)
+        for length, curvature in product(ARC_LENGTHS, curvatures)
     ]
 
 
@@ -196,7 +206,7 @@ def plan(
     print(f"  Destination:   ({destination.x:.2f}, {destination.y:.2f}, {math.degrees(destination.heading):.0f}°)")
     print(f"  Vehicle: {vehicle_spec.length:.2f}m long × {vehicle_spec.width:.2f}m wide")
 
-    primitives = create_motion_primitives()
+    primitives = create_motion_primitives(vehicle_spec)
     print(f"  Motion primitives: {len(primitives)}")
 
     open_set = []
@@ -253,6 +263,12 @@ def plan(
         # Expand neighbors
         for primitive in primitives:
             new_state, path_segment = primitive.apply(current.state)
+            
+            # For Ackermann vehicles: reject spin-in-place primitives (zero arc length with curvature)
+            from vehicle import KinematicModel
+            if (vehicle_spec.kinematic_model == KinematicModel.ACKERMANN and 
+                abs(primitive.arc_length) < 1.0 and abs(primitive.curvature) > 0.0):
+                continue
 
             new_key = StateKey.from_pos(new_state)
             if new_key in visited:

@@ -44,7 +44,7 @@ CAR = VehicleSpec(
     wheelbase=2.8,
     cargo_manifest="Donuts",
     cruising_velocity=6.0,  # The donut carrier is faster than the burrito carrier
-    w_max=math.pi,  # Looser turning rate as we are constrained by steering
+    w_max=math.pi / 2,  # Looser turning rate as we are constrained by steering
     max_steering_angle=math.radians(35),  # Typical steering for a passenger car
     track_width=1.8,
     origin=Pos(x=1.5, y=3.0, heading=math.pi / 2),
@@ -56,14 +56,14 @@ CAR = VehicleSpec(
 )
 
 """MODIFY THIS TO SET UP THE SIMULATION"""
-vehicle = Vehicle(ROBOT)
-# vehicle = Vehicle(CAR)
+# vehicle = Vehicle(ROBOT)
+vehicle = Vehicle(CAR)
 
 # world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
 # world = World(PARKING_LOT_3)
-# world = World(PARKING_LOT_4)
-world = World(EMPTY_PARKING_LOT)
+world = World(PARKING_LOT_4)
+# world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
 RENDER_OVERLAY = True
