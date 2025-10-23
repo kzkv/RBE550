@@ -31,7 +31,7 @@ class CollisionChecker:
 
     def __init__(self, world: World, vehicle_spec: VehicleSpec):
         self.obstacles = world.obstacles
-        self.discretization = 0.15  # this probably doesn't need to be configurable
+        self.discretization = 0.1  # this probably doesn't need to be configurable; mathching safety margin
         self.world = world
         self.vehicle_spec = vehicle_spec
 

@@ -48,8 +48,6 @@ VEHICLE_SAFETY_MARGIN = 0.1  # m
 MAX_ITERATIONS = 30000
 PROGRESS_INTERVAL = 1000
 
-PATH_EXTENSION = 0.25
-
 
 def get_obb_corners(x: float, y: float, heading: float, length: float, width: float) -> List[Tuple[float, float]]:
     """Compute the four corners of an oriented bounding box"""
@@ -180,7 +178,7 @@ class StateKey:
         # Wrap heading to [-pi, pi] before discretization to ensure
         # equivalent headings map to the same bucket
         wrapped_heading = (pos.heading + math.pi) % (2 * math.pi) - math.pi
-        
+
         return StateKey(
             x=round(pos.x / XY_RESOLUTION) * XY_RESOLUTION,
             y=round(pos.y / XY_RESOLUTION) * XY_RESOLUTION,
@@ -208,7 +206,7 @@ def is_collision_free(
         path_points: List[Pos],
         obstacles: np.ndarray,
         vehicle_spec: VehicleSpec,
-        collision_checker,  
+        collision_checker,
 ) -> bool:
     """
     Three-tier collision checking:
@@ -217,28 +215,28 @@ def is_collision_free(
     3. OBB check - precise validation for ambiguous cases
     """
     obb_check_needed = []
-    
+
     for pos in path_points:
         # Tier 1: Loose overlay check (conservative radius)
         if not collision_checker.check_loose(pos):
             # Definitely safe - no collision in worst case
             continue
-        
+
         # Tier 2: Tight overlay check (optimistic radius)
         if collision_checker.check_tight(pos):
             # Definitely collides - even best-case alignment hits obstacle
             return False
-        
+
         # Tier 3: Ambiguous - needs precise OBB check
         obb_check_needed.append(pos)
-    
+
     # Perform OBB checks only for ambiguous points
     for pos in obb_check_needed:
-        corners = get_obb_corners(pos.x, pos.y, pos.heading, 
-                                 vehicle_spec.length, vehicle_spec.width)
+        corners = get_obb_corners(pos.x, pos.y, pos.heading,
+                                  vehicle_spec.length, vehicle_spec.width)
         if check_obb_collision(corners, obstacles):
             return False
-    
+
     return True
 
 
@@ -279,21 +277,10 @@ def reconstruct_path(node: SearchNode) -> List[Pos]:
             wrapped_heading = (pos.heading + math.pi) % (2 * math.pi) - math.pi
             path.append(Pos(pos.x, pos.y, wrapped_heading))
 
-    # Replace the last waypoint with the actual goal node state
-    # This ensures the heading matches what the planner verified against the goal
-    if path and node.state:
-        path[-1] = Pos(node.state.x, node.state.y, node.state.heading)
-    
-    # Add a small extension segment in the direction of final heading
-    # This helps Pure Pursuit track the final heading without instability
-    # TODO: explain the shenanigans happening here in the report
-    if path:
-        final_waypoint = path[-1]
-        extension_length = PATH_EXTENSION
-        extended_x = final_waypoint.x + extension_length * math.cos(final_waypoint.heading)
-        extended_y = final_waypoint.y + extension_length * math.sin(final_waypoint.heading)
-        extension_point = Pos(extended_x, extended_y, final_waypoint.heading)
-        path.append(extension_point)
+    # # Replace the last waypoint with the actual goal node state
+    # # This ensures the heading matches what the planner verified against the goal
+    # if path and node.state:
+    #     path[-1] = Pos(node.state.x, node.state.y, node.state.heading)
 
     return path
 
@@ -355,7 +342,7 @@ def plan(
 
             path = reconstruct_path(current)
             print(f"  Reconstructed {len(path)} waypoints")
-            
+
             if path:
                 final_waypoint = path[-1]
                 final_xy_error = final_waypoint.distance_to(goal)
@@ -365,7 +352,7 @@ def plan(
                 print(f"    Final waypoint heading: {math.degrees(final_waypoint.heading):.3f}°")
                 print(f"    XY error: {final_xy_error:.3f}m")
                 print(f"    Heading error: {math.degrees(final_heading_error):.3f}°")
-            
+
             return path
 
         # Expand neighbors
