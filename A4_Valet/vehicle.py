@@ -19,6 +19,7 @@ BREADCRUMB_COLOR = (255, 0, 0)
 
 EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 
+
 class KinematicModel(Enum):
     DIFF_DRIVE = "diff_drive"
     ACKERMANN = "ackermann"
@@ -55,7 +56,7 @@ class Vehicle:
         # For diff-drive: linear and angular velocities
         # For Ackermann: linear velocity and steering angle
         self._v_desired = 0.0  # Desired velocity from controller
-        self._v_actual = 0.0   # Actual velocity (affected by acceleration limits)
+        self._v_actual = 0.0  # Actual velocity (affected by acceleration limits)
         self._w_or_delta = 0.0  # w for diff-drive, delta (steering angle) for Ackermann
 
         # Persistent breadcrumbs trail; stored in pixels to avoid recalculation in render.
@@ -96,18 +97,18 @@ class Vehicle:
         # Apply acceleration limits to reach the desired velocity
         v_error = self._v_desired - self._v_actual
         max_delta_v = self.spec.max_acceleration * delta_time
-        
+
         if abs(v_error) <= max_delta_v:
             # Can reach the desired velocity in this time step
             self._v_actual = self._v_desired
         else:
             # Accelerate/decelerate at max rate
             self._v_actual += math.copysign(max_delta_v, v_error)
-        
+
         v = self._v_actual
         th = self.pos.heading
 
-        # determine angular velocity based on the kinematic model
+        # Determine angular velocity based on the kinematic model
         if self.spec.kinematic_model == KinematicModel.ACKERMANN:
             # For Ackermann: compute w from steering angle
             # w = v * tan(delta) / L
@@ -120,12 +121,12 @@ class Vehicle:
             # For diff-drive: w is directly commanded
             w = self._w_or_delta
 
-        # integrate motion using unicycle model, applies regardless of kinematic model
-        if abs(w) < EPSILON:  # straight line motion
+        # Integrate motion using unicycle model; applies regardless of kinematic model
+        if abs(w) < EPSILON:  # Straight-line motion
             new_x = self.pos.x + v * math.cos(th) * delta_time
             new_y = self.pos.y + v * math.sin(th) * delta_time
             self.pos = Pos(new_x, new_y, th)
-        else:  # circular arc motion
+        else:  # Circular-arc motion
             th_new = th + w * delta_time
             new_x = self.pos.x + (v / w) * (math.sin(th_new) - math.sin(th))
             new_y = self.pos.y + (v / w) * (-math.cos(th_new) + math.cos(th))
@@ -161,12 +162,12 @@ class Vehicle:
             pygame.Rect(0, 0, Lpx, Wpx),
             border_radius=max(2, Wpx // 4),
         )
-        # indicate front
+        # Indicate front
         stripe_w = 4  # px
         stripe_x = Lpx - stripe_w - 6
         pygame.draw.rect(surf, self.spec.front_stripe_color, (stripe_x, 4, stripe_w, Wpx - 8), border_radius=2)
 
-        # rotate to the current heading
+        # Rotate to the current heading
         rotated = pygame.transform.rotate(surf, -math.degrees(render_pos.heading))
 
         px = int(render_pos.x * ppm)
@@ -175,7 +176,7 @@ class Vehicle:
         world.screen.blit(rotated, rect.topleft)
 
     def render_breadcrumbs(self, world: World):
-        """max_velocity is not controlled for <=0"""
+        """Max velocity is not controlled for <= 0"""
         for (px, py), v in self.breadcrumbs:
             pygame.draw.circle(world.screen, BREADCRUMB_COLOR, (px, py), max(1, int(v)))
 

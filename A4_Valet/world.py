@@ -87,7 +87,6 @@ PARKING_LOT_4 = np.array([
     [0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1],
 ], dtype=bool)
 
-
 EMPTY_PARKING_LOT = np.array([
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -212,16 +211,16 @@ class World:
         if vehicle_location:
             cursor_location_string = f"{x:04.1f}, {y:04.1f} (row/col {row:02d}, {col:02d})"
             vehicle_location_string = f"{vehicle_location.x:04.1f}, {vehicle_location.y:04.1f}"
-            
+
             xy_error = vehicle_location.distance_to(destination)
             heading_error = vehicle_location.heading_error_to(destination)
             error_string = f"   Errors: XY {xy_error:.2f}m, heading {math.degrees(heading_error):.1f}°"
-            
+
             text = f"Cursor: {cursor_location_string}   Vehicle: {vehicle_location_string}{error_string}   {message}"
 
         img = self.font.render(text, True, HUD_FONT_COLOR)
 
-        if in_bounds:  # assumes the cursor is always within bounds
+        if in_bounds:  # Assumes the cursor is always within bounds
             self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
 
     def render_route(self, route: List[Pos]):

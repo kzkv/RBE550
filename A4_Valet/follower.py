@@ -19,6 +19,7 @@ POS_ERROR_THRESHOLD = 0.1
 
 EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 
+
 class PathFollower:
     def __init__(
             self,
@@ -30,10 +31,10 @@ class PathFollower:
         self.route = route
         self.lookahead = lookahead
         self.wheel_speed_max = self.vehicle.spec.cruising_velocity * 1.5
-        
+
         # Compute braking distance
         self.braking_distance = (self.vehicle.spec.cruising_velocity ** 2) / (2 * self.vehicle.spec.max_acceleration)
-        
+
         # Compute acceleration distance
         self.acceleration_distance = self.braking_distance
 
@@ -78,11 +79,11 @@ class PathFollower:
         # Update traveled distance based on actual vehicle position along path
         min_dist = None
         closest_s = self.traveled
-        
+
         # Search around current traveled position for closest point
         search_start = max(0.0, self.traveled - self.lookahead)
         search_end = min(self.total_arc_length, self.traveled + self.lookahead)
-        
+
         # Sample points along the path
         samples = 20
         for i in range(samples + 1):
@@ -92,7 +93,7 @@ class PathFollower:
             if min_dist is None or dist < min_dist:
                 min_dist = dist
                 closest_s = s
-        
+
         self.traveled = closest_s
 
         # Lookahead target point (clamped)
@@ -111,9 +112,9 @@ class PathFollower:
         # Pure Pursuit steering law (κ = 2*y_frame / d^2; thanks, ChatGPT)
         d_squared = x_frame * x_frame + y_frame * y_frame
         if d_squared == 0:
-            kappa = 0  # avoid div by zero  TODO: why does this happen? probably zero-length segments
+            kappa = 0  # Avoid division by zero.
         else:
-            kappa = 2 * y_frame / d_squared  # turn sharpness
+            kappa = 2 * y_frame / d_squared  # Turn sharpness
 
         # Compute kinematic-specific limits
         from vehicle import KinematicModel
@@ -138,8 +139,8 @@ class PathFollower:
             # |w| <= 2/track_width * (wheel_speed_max - |v|); thanks again, ChatGPT
             w_cap = (2.0 / self.vehicle.spec.track_width) * max(0.0, self.wheel_speed_max - abs(v))
             if abs(w) > w_cap:
-                w = math.copysign(w_cap, w)  # keep the sign, but clamp
-            # TODO: consider checking each wheels individually to avoid any corner cases
+                w = math.copysign(w_cap, w)  # Keep the sign, but clamp
+            # TODO: consider checking each wheel individually to avoid any corner cases
         else:
             # For Ackermann: constrain angular velocity based on current speed and max steering
             if abs(v) > EPSILON:

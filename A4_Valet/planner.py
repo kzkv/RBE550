@@ -46,6 +46,7 @@ PROGRESS_INTERVAL = 1000
 
 EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 
+
 @dataclass
 class MotionPrimitive:
     """Motion primitive representing a curved or straight path segment"""
@@ -57,7 +58,7 @@ class MotionPrimitive:
         """Generate path points as Pos objects and end state for this primitive"""
         path_points = []
 
-        if abs(self.curvature) < EPSILON:  # straight line
+        if abs(self.curvature) < EPSILON:  # Straight line
             for i in range(self.num_steps + 1):
                 s = (i / self.num_steps) * self.arc_length
                 x = state.x + s * math.cos(state.heading)
@@ -70,7 +71,7 @@ class MotionPrimitive:
                 heading=state.heading
             )
 
-        else:  # circular arc
+        else:  # Circular arc
             radius = 1.0 / self.curvature
             d_theta = self.curvature * self.arc_length
 
@@ -98,7 +99,7 @@ class MotionPrimitive:
 def create_motion_primitives(vehicle_spec: VehicleSpec) -> List[MotionPrimitive]:
     """Generate all motion primitive combinations"""
     from vehicle import KinematicModel
-    
+
     if vehicle_spec.kinematic_model == KinematicModel.ACKERMANN:
         # For Ackermann: filter curvatures to respect max steering angle
         kappa_max = math.tan(vehicle_spec.max_steering_angle) / vehicle_spec.wheelbase
@@ -106,7 +107,7 @@ def create_motion_primitives(vehicle_spec: VehicleSpec) -> List[MotionPrimitive]
     else:
         # For diff-drive: use the original curvature set
         curvatures = CURVATURES
-    
+
     return [
         MotionPrimitive(arc_length=length, curvature=curvature)
         for length, curvature in product(ARC_LENGTHS, curvatures)
@@ -264,11 +265,11 @@ def plan(
         # Expand neighbors
         for primitive in primitives:
             new_state, path_segment = primitive.apply(current.state)
-            
+
             # For Ackermann vehicles: reject spin-in-place primitives (zero arc length with curvature)
             from vehicle import KinematicModel
-            if (vehicle_spec.kinematic_model == KinematicModel.ACKERMANN and 
-                abs(primitive.arc_length) < 1.0 and abs(primitive.curvature) > 0.0):
+            if (vehicle_spec.kinematic_model == KinematicModel.ACKERMANN and
+                    abs(primitive.arc_length) < 1.0 and abs(primitive.curvature) > 0.0):
                 continue
 
             new_key = StateKey.from_pos(new_state)

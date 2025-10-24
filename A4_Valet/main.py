@@ -134,7 +134,7 @@ while running:
         collision.render_boundary_overlay()
         collision.render_tight_overlay()
 
-    if len(route) > 1:  # we actually have a route to follow
+    if len(route) > 1:  # We actually have a route to follow
         follower.update()
         vehicle.drive(delta_time, world)
         world.render_hud(vehicle_location=vehicle.pos, destination=vehicle.spec.destination)

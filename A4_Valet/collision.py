@@ -36,19 +36,19 @@ class CollisionChecker:
         self.vehicle_spec = vehicle_spec
         self.discretization = 0.1  # 20 fine cells per coarse cell
 
-        # calculate fine grid dimensions
+        # Calculate fine grid dimensions
         self.fine_grid_size = int(np.ceil(self.world.grid_dimensions * self.world.cell_size / self.discretization))
 
-        # discretize obstacles to fine grid
+        # Discretize obstacles to fine grid
         self.fine_obstacles = self._discretize_obstacles()
 
-        # produce the inflated obstacles
+        # Produce the inflated obstacles
         loose_radius = self.vehicle_spec.length / 2 + self.vehicle_spec.safety_margin
         tight_radius = self.vehicle_spec.width / 2 + self.vehicle_spec.safety_margin
         self.loose_overlay = self._inflate_obstacles(loose_radius)
         self.tight_overlay = self._inflate_obstacles(tight_radius)
 
-        # produce boundary overlay
+        # Produce boundary overlay
         self.boundary_overlay = self._create_boundary_overlay()
 
         # Prebuild overlay surfaces for fast rendering
@@ -59,7 +59,7 @@ class CollisionChecker:
         Create an overlay marking the boundary zone where OBB checks are needed.
         This marks cells within buffer_distance of the world edges.
 
-        # Use half-diagonal (worst case corner distance) + safety margin
+        Use half-diagonal (worst-case corner distance) plus safety margin.
         """
         vehicle_half_diagonal = math.hypot(self.vehicle_spec.length / 2, self.vehicle_spec.width / 2)
         buffer_distance = vehicle_half_diagonal + self.vehicle_spec.safety_margin
@@ -84,10 +84,10 @@ class CollisionChecker:
         """Convert coarse obstacle grid to fine-resolution grid."""
         fine_obstacles = np.zeros((self.fine_grid_size, self.fine_grid_size), dtype=bool)
 
-        # each coarse cell corresponds to multiple fine cells
+        # Each coarse cell corresponds to multiple fine cells
         cells_per_coarse = int(self.world.cell_size / self.discretization)
 
-        # fill fine grid cells
+        # Fill fine grid cells
         for row in range(self.world.grid_dimensions):
             for col in range(self.world.grid_dimensions):
                 if self.obstacles[row, col]:
@@ -137,7 +137,7 @@ class CollisionChecker:
         # Out of bounds check
         in_bounds = 0 <= row < self.fine_grid_size and 0 <= col < self.fine_grid_size
         if not in_bounds:
-            return True  # out of bounds is treated as a collision
+            return True  # Out of bounds is treated as a collision
 
         return overlay[row, col]
 
