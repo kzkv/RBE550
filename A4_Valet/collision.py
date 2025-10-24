@@ -33,7 +33,7 @@ class CollisionChecker:
         self.obstacles = world.obstacles
         self.world = world
         self.vehicle_spec = vehicle_spec
-        self.discretization = self.vehicle_spec.safety_margin  # matching safety margin for discretization
+        self.discretization = 0.1  # 20 fine cells per coarse cell
 
         # calculate fine grid dimensions
         self.fine_grid_size = int(np.ceil(self.world.grid_dimensions * self.world.cell_size / self.discretization))

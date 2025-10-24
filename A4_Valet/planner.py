@@ -29,7 +29,7 @@ pi = math.pi
 # Motion primitive parameters  # TODO: it would be great to smooth the trajectory
 ARC_LENGTHS = [0.3, 0.75, 1.5, 3.0, 6.0]
 CURVATURES = [0.0, pi / 24, -pi / 24, pi / 12, -pi / 12, pi / 6, -pi / 6]
-PRIMITIVE_STEPS = 10
+PRIMITIVE_STEPS = 30
 
 # Prefer longer arcs; TODO: don't forget to highlight in the report how essential this proved to be
 ARC_LENGTH_BIAS_WEIGHT = 2.0
@@ -38,7 +38,7 @@ MAX_ARC_LENGTH = max(ARC_LENGTHS)
 # Discretization resolution; these are magic parameters that had to be tuned to achieve good performance.
 # Too coarse or too fine is failing the path planning.
 XY_RESOLUTION = 0.75
-THETA_RESOLUTION = math.pi / 6  # ~30 deg
+THETA_RESOLUTION = math.radians(30.0)
 
 # A* search limits
 MAX_ITERATIONS = 30000
