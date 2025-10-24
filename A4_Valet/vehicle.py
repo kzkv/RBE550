@@ -9,13 +9,13 @@ from enum import Enum
 import math
 import pygame
 
-# Reuse helpers from your world module
 from world import World, Pos
 
 VEHICLE_BG_COLOR = (56, 67, 205)
 VEHICLE_FRONT_STRIPE_COLOR = (255, 255, 255, 180)
 DESTINATION_COLOR = (90, 200, 90, 100)
 BREADCRUMB_COLOR = (255, 0, 0)
+HITCH_COLOR = (0, 0, 0)
 
 EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 
@@ -23,6 +23,15 @@ EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 class KinematicModel(Enum):
     DIFF_DRIVE = "diff_drive"
     ACKERMANN = "ackermann"
+
+
+@dataclass(frozen=True)
+class TrailerSpec:
+    """Specification for a trailer attached to a vehicle"""
+    length: float  # m
+    width: float  # m
+    hitch_length: float  # m, distance from vehicle rear to trailer axle (d1)
+    color: Tuple[int, int, int] = VEHICLE_BG_COLOR
 
 
 @dataclass(frozen=True)
@@ -42,6 +51,7 @@ class VehicleSpec:
     planned_xy_error: float
     planned_heading_error: float
     kinematic_model: KinematicModel
+    trailer: Optional[TrailerSpec] = None  # Optional trailer specification
     color: Tuple[int, int, int] = VEHICLE_BG_COLOR
     front_stripe_color: Tuple[int, int, int] = VEHICLE_FRONT_STRIPE_COLOR
 
@@ -55,9 +65,14 @@ class Vehicle:
 
         # For diff-drive: linear and angular velocities
         # For Ackermann: linear velocity and steering angle
-        self._v_desired = 0.0  # Desired velocity from controller
+        self._v_desired = 0.0  # Desired velocity from the controller
         self._v_actual = 0.0  # Actual velocity (affected by acceleration limits)
         self._w_or_delta = 0.0  # w for diff-drive, delta (steering angle) for Ackermann
+
+        # Trailer state (if equipped)
+        self.trailer_heading: Optional[float] = None
+        if self.spec.trailer is not None:
+            self.trailer_heading = spec.origin.heading
 
         # Persistent breadcrumbs trail; stored in pixels to avoid recalculation in render.
         # Adds velocity to reflect how fast the robot was moving at each point.
@@ -68,7 +83,7 @@ class Vehicle:
         Set control inputs for the vehicle.
         For diff-drive: v is linear velocity, w is angular velocity
         For Ackermann: v is linear velocity, w is treated as desired angular velocity
-                       (converted to steering angle internally)
+                       (converted to the steering angle internally)
         """
         self._v_desired = v
 
@@ -93,7 +108,7 @@ class Vehicle:
         return (angle + math.pi) % (2 * math.pi) - math.pi
 
     def drive(self, delta_time: float, world: World):
-        """Integrate vehicle motion based on kinematic model"""
+        """Integrate vehicle motion based on the kinematic model"""
         # Apply acceleration limits to reach the desired velocity
         v_error = self._v_desired - self._v_actual
         max_delta_v = self.spec.max_acceleration * delta_time
@@ -121,7 +136,7 @@ class Vehicle:
             # For diff-drive: w is directly commanded
             w = self._w_or_delta
 
-        # Integrate motion using unicycle model; applies regardless of kinematic model
+        # Integrate motion using a unicycle model; applies regardless of kinematic model
         if abs(w) < EPSILON:  # Straight-line motion
             new_x = self.pos.x + v * math.cos(th) * delta_time
             new_y = self.pos.y + v * math.sin(th) * delta_time
@@ -133,7 +148,49 @@ class Vehicle:
             th_new = self._wrap_angle(th_new)
             self.pos = Pos(new_x, new_y, th_new)
 
+        # Update trailer kinematics if equipped
+        if self.spec.trailer is not None and self.trailer_heading is not None:
+            self._update_trailer(v, delta_time)
+
         self._update_breadcrumbs(world)
+
+    def _update_trailer(self, v: float, delta_time: float):
+        """Update trailer heading based on truck motion."""
+        if self.spec.trailer is None or self.trailer_heading is None:
+            return
+
+        d1 = self.spec.trailer.hitch_length
+        theta_0 = self.pos.heading
+        phi = self.trailer_heading
+
+        # Compute the trailer heading's rate of change
+        dphi_dt = (v / d1) * math.sin(theta_0 - phi)
+
+        # Integrate to get the new trailer heading
+        self.trailer_heading = self._wrap_angle(phi + dphi_dt * delta_time)
+
+    def get_trailer_position(self) -> Optional[Pos]:
+        """
+        Calculate the position of the trailer's center.
+        The hitch point is at the rear of the truck body, and the trailer axle
+        is at distance d1 from the hitch point along the trailer's heading.
+        """
+        if self.spec.trailer is None or self.trailer_heading is None:
+            return None
+
+        # Calculate hitch point at the rear of the truck
+        truck_th = self.pos.heading
+        hitch_x = self.pos.x - (self.spec.length / 2) * math.cos(truck_th)
+        hitch_y = self.pos.y - (self.spec.length / 2) * math.sin(truck_th)
+
+        # Calculate trailer axle position (d1 from hitch, along trailer heading)
+        d1 = self.spec.trailer.hitch_length
+        phi = self.trailer_heading
+        trailer_axle_x = hitch_x - d1 * math.cos(phi)
+        trailer_axle_y = hitch_y - d1 * math.sin(phi)
+
+        # Trailer center is at its axle (since axle is at midpoint)
+        return Pos(trailer_axle_x, trailer_axle_y, phi)
 
     def _update_breadcrumbs(self, world: World):
         """Update breadcrumbs trail"""
@@ -142,7 +199,14 @@ class Vehicle:
         self.breadcrumbs.append(((px, py), self._v_actual))
 
     def render(self, world: World, pos: Optional[Pos] = None):
-        """Render vehicle at current or specified position with optional color override"""
+        """Render vehicle at current or specified position"""
+        # Render the trailer first (if equipped) so it appears behind the truck
+        # TODO: validate that the order of rendering is correct and matters
+        if self.spec.trailer is not None and pos is None:
+            trailer_pos = self.get_trailer_position()
+            if trailer_pos is not None:
+                self._render_trailer(world, trailer_pos)
+
         ppm = world.pixels_per_meter
         Lpx = int(self.spec.length * ppm)
         Wpx = int(self.spec.width * ppm)
@@ -174,6 +238,52 @@ class Vehicle:
         py = int(render_pos.y * ppm)
         rect = rotated.get_rect(center=(px, py))
         world.screen.blit(rotated, rect.topleft)
+
+    def _render_trailer(self, world: World, trailer_pos: Pos):
+        """Render the trailer at the specified position"""
+        if self.spec.trailer is None:
+            return
+
+        ppm = world.pixels_per_meter
+        Lpx = int(self.spec.trailer.length * ppm)
+        Wpx = int(self.spec.trailer.width * ppm)
+
+        surf = pygame.Surface((Lpx, Wpx), pygame.SRCALPHA)
+        pygame.draw.rect(
+            surf,
+            self.spec.trailer.color,
+            pygame.Rect(0, 0, Lpx, Wpx),
+            border_radius=max(2, Wpx // 4),
+        )
+
+        # Rotate to the trailer heading
+        rotated = pygame.transform.rotate(surf, -math.degrees(trailer_pos.heading))
+
+        px = int(trailer_pos.x * ppm)
+        py = int(trailer_pos.y * ppm)
+        rect = rotated.get_rect(center=(px, py))
+        world.screen.blit(rotated, rect.topleft)
+
+        # Draw hitch connection line
+        self._render_hitch(world, trailer_pos)
+
+    def _render_hitch(self, world: World, trailer_pos: Pos):
+        """Draw a line showing the hitch connection between truck and trailer"""
+        ppm = world.pixels_per_meter
+
+        # Hitch point at the rear of the truck body
+        truck_th = self.pos.heading
+        hitch_x = self.pos.x - (self.spec.length / 2) * math.cos(truck_th)
+        hitch_y = self.pos.y - (self.spec.length / 2) * math.sin(truck_th)
+
+        # Convert to pixels
+        hitch_px = int(hitch_x * ppm)
+        hitch_py = int(hitch_y * ppm)
+        trailer_px = int(trailer_pos.x * ppm)
+        trailer_py = int(trailer_pos.y * ppm)
+
+        # Draw hitch line
+        pygame.draw.line(world.screen, HITCH_COLOR, (hitch_px, hitch_py), (trailer_px, trailer_py), 2)
 
     def render_breadcrumbs(self, world: World):
         """Max velocity is not controlled for <= 0"""

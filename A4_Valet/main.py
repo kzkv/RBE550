@@ -9,7 +9,7 @@ import math
 
 from collision import CollisionChecker
 from follower import PathFollower
-from vehicle import VehicleSpec, Vehicle, KinematicModel
+from vehicle import VehicleSpec, TrailerSpec, Vehicle, KinematicModel
 from world import World, Pos
 from world import PARKING_LOT_1, PARKING_LOT_2, PARKING_LOT_3, PARKING_LOT_4, EMPTY_PARKING_LOT, \
     EMPTY_PARKING_LOT_FOR_TRAILER
@@ -57,16 +57,40 @@ CAR = VehicleSpec(
     kinematic_model=KinematicModel.ACKERMANN
 )
 
+TRUCK = VehicleSpec(
+    length=5.4,
+    width=2.0,
+    wheelbase=3.4,
+    track_width=1.8,
+    cargo_manifest="Dimensional lumberjacks",
+    cruising_velocity=4.0,  # A bit slower than a car
+    w_max=0.0,
+    max_steering_angle=math.radians(35),
+    max_acceleration=2.0,  # m/s^2, also a bit slower than a car
+    origin=Pos(x=1.5, y=10.0, heading=math.pi / 2),
+    destination=Pos(x=27.0, y=34.5, heading=0.0),
+    safety_margin=0.1,
+    planned_xy_error=1.2,
+    planned_heading_error=math.radians(90),
+    kinematic_model=KinematicModel.ACKERMANN,
+    trailer=TrailerSpec(
+        length=4.5,
+        width=2.0,
+        hitch_length=5.0,  # d1 from the problem
+    )
+)
+
 """MODIFY THIS TO SET UP THE SIMULATION"""
 # vehicle = Vehicle(ROBOT)
-vehicle = Vehicle(CAR)
+# vehicle = Vehicle(CAR)
+vehicle = Vehicle(TRUCK)
 
 # world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
 # world = World(PARKING_LOT_3)
-world = World(PARKING_LOT_4)
+# world = World(PARKING_LOT_4)
 # world = World(EMPTY_PARKING_LOT)
-# world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
+world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
 RENDER_OVERLAY = True
 # RENDER_OVERLAY = False
