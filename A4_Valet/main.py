@@ -52,23 +52,24 @@ CAR = VehicleSpec(
     origin=Pos(x=1.5, y=3.0, heading=math.pi / 2),
     destination=Pos(x=27.0, y=34.5, heading=0.0),
     safety_margin=0.1,
-    planned_xy_error=1.0,
+    planned_xy_error=1.2,
     planned_heading_error=math.radians(90),  # a looser parked heading requirement
     kinematic_model=KinematicModel.ACKERMANN
 )
 
 """MODIFY THIS TO SET UP THE SIMULATION"""
-# vehicle = Vehicle(ROBOT)
-vehicle = Vehicle(CAR)
+vehicle = Vehicle(ROBOT)
+# vehicle = Vehicle(CAR)
 
 # world = World(PARKING_LOT_1)
-# world = World(PARKING_LOT_2)
-world = World(PARKING_LOT_3)
+world = World(PARKING_LOT_2)
+# world = World(PARKING_LOT_3)
 # world = World(PARKING_LOT_4)
 # world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
-RENDER_OVERLAY = True
+# RENDER_OVERLAY = True
+RENDER_OVERLAY = False
 """"""
 
 collision = CollisionChecker(world, vehicle.spec)
@@ -83,6 +84,7 @@ vehicle.render(world)  # Render current position
 
 if RENDER_OVERLAY:
     collision.render_loose_overlay()
+    collision.render_boundary_overlay()
     collision.render_tight_overlay()
 
 world.render_hud(message="Planning route, please wait...")
@@ -128,7 +130,8 @@ while running:
     vehicle.render_parking_zone(world)
 
     if RENDER_OVERLAY:
-        # collision.render_loose_overlay()
+        collision.render_loose_overlay()
+        collision.render_boundary_overlay()
         collision.render_tight_overlay()
 
     if len(route) > 1:  # we actually have a route to follow

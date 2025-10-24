@@ -14,6 +14,7 @@ from world import World, Pos, world_to_grid
 
 LOOSE_OVERLAY_COLOR = (255, 0, 0, 50)
 TIGHT_OVERLAY_COLOR = (255, 165, 0, 50)
+BOUNDARY_OVERLAY_COLOR = (0, 0, 0, 25)
 
 
 class CollisionChecker:
@@ -41,13 +42,36 @@ class CollisionChecker:
         # discretize obstacles to fine grid
         self.fine_obstacles = self._discretize_obstacles()
 
-        # prodice the inflated obstacles
+        # produce the inflated obstacles
         loose_radius = self.vehicle_spec.length / 2 + self.vehicle_spec.safety_margin
         tight_radius = self.vehicle_spec.width / 2 + self.vehicle_spec.safety_margin
         self.loose_overlay = self._inflate_obstacles(loose_radius)
         self.tight_overlay = self._inflate_obstacles(tight_radius)
 
-    def world_to_fine_grid(self, x: float, y: float) -> tuple[int, int]:
+        # produce boundary overlay
+        self.boundary_overlay = self._create_boundary_overlay()
+
+    def _create_boundary_overlay(self) -> np.ndarray:
+        """
+        Create an overlay marking the boundary zone where OBB checks are needed.
+        This marks cells within buffer_distance of the world edges.
+
+        # Use half-diagonal (worst case corner distance) + safety margin
+        """
+        vehicle_half_diagonal = math.hypot(self.vehicle_spec.length / 2, self.vehicle_spec.width / 2)
+        buffer_distance = vehicle_half_diagonal + self.vehicle_spec.safety_margin
+
+        overlay = np.zeros((self.fine_grid_size, self.fine_grid_size), dtype=bool)
+        buffer_cells = int(np.ceil(buffer_distance / self.discretization))
+
+        overlay[:buffer_cells, :] = True  # Top edge
+        overlay[-buffer_cells:, :] = True  # Bottom edge
+        overlay[:, :buffer_cells] = True  # Left edge
+        overlay[:, -buffer_cells:] = True  # Right edge
+
+        return overlay
+
+    def _world_to_fine_grid(self, x: float, y: float) -> tuple[int, int]:
         """Convert world coordinates (x, y) to (row, col) indices in the fine grid."""
         col = int(x / self.discretization)
         row = int(y / self.discretization)
@@ -105,12 +129,12 @@ class CollisionChecker:
 
     def _check_collision_at_xy(self, overlay, pos: Pos) -> bool:
         """Check if position collides with given overlay."""
-        row, col = self.world_to_fine_grid(pos.x, pos.y)
+        row, col = self._world_to_fine_grid(pos.x, pos.y)
 
-        # TODO: make sure out of bounds check is not redundant
+        # Out of bounds check
         in_bounds = 0 <= row < self.fine_grid_size and 0 <= col < self.fine_grid_size
         if not in_bounds:
-            return True  # out of bounds is treated as an obstacle
+            return True  # out of bounds is treated as a collision
 
         return overlay[row, col]
 
@@ -119,6 +143,10 @@ class CollisionChecker:
 
     def check_tight(self, pos: Pos) -> bool:
         return self._check_collision_at_xy(self.tight_overlay, pos)
+
+    def check_boundary(self, pos: Pos) -> bool:
+        """Check if position is in the boundary danger zone"""
+        return self._check_collision_at_xy(self.boundary_overlay, pos)
 
     def _get_obb_corners(self, pos: Pos) -> List[Tuple[float, float]]:
         """Compute the four corners of an oriented bounding box for the vehicle at a given position."""
@@ -181,10 +209,11 @@ class CollisionChecker:
 
     def is_path_collision_free(self, path_points: List[Pos]) -> bool:
         """
-        Three-tier collision checking for a path:
+        Four-tier collision checking for a path:
         1. Loose overlay (conservative) - instant approval if clear
-        2. Tight overlay (optimistic) - instant rejection if there is a collision
-        3. OBB check - precise validation for ambiguous cases
+        2. Boundary overlay - triggers OBB check near edges
+        3. Tight overlay (optimistic) - instant rejection if collision detected
+        4. OBB check - precise validation for ambiguous cases and boundary regions
         """
         obb_check_needed = []
 
@@ -192,17 +221,20 @@ class CollisionChecker:
             # Tier 1: Loose overlay check (conservative radius)
             if not self.check_loose(pos):
                 # Definitely safe - no collision in the worst case
+                # Tier 2. Check if near boundary (need OBB for rotated vehicle)
+                if self.check_boundary(pos):
+                    obb_check_needed.append(pos)
                 continue
 
-            # Tier 2: Tight overlay check (optimistic radius)
+            # Tier 3: Tight overlay check (optimistic radius)
             if self.check_tight(pos):
                 # Definitely collides - even best-case alignment hits the obstacle
                 return False
 
-            # Tier 3: Ambiguous - needs precise OBB check
+            # Tier 4: Ambiguous - needs precise OBB check
             obb_check_needed.append(pos)
 
-        # Perform OBB checks only for ambiguous points
+        # Perform OBB checks only for ambiguous points and boundary regions
         for pos in obb_check_needed:
             if self.check_obb_collision(pos):
                 return False
@@ -242,3 +274,6 @@ class CollisionChecker:
 
     def render_tight_overlay(self):
         self._render_overlay(self.tight_overlay, TIGHT_OVERLAY_COLOR)
+
+    def render_boundary_overlay(self):
+        self._render_overlay(self.boundary_overlay, BOUNDARY_OVERLAY_COLOR)
