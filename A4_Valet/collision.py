@@ -2,7 +2,7 @@
 # RBE 550
 # Assignment 4, Valet
 # Collision checker
-# Gen AI usage: Claud for drafting the code and ideation
+# Gen AI usage: Claud for drafting the code and ideation; GPT-5 for caching the overlays
 
 import math
 import numpy as np
@@ -12,8 +12,8 @@ from typing import List, Tuple
 from vehicle import VehicleSpec
 from world import World, Pos, world_to_grid
 
-LOOSE_OVERLAY_COLOR = (255, 0, 0, 50)
-TIGHT_OVERLAY_COLOR = (255, 165, 0, 50)
+LOOSE_OVERLAY_COLOR = (255, 165, 0, 50)
+TIGHT_OVERLAY_COLOR = (255, 0, 0, 50)
 BOUNDARY_OVERLAY_COLOR = (0, 0, 0, 25)
 
 
@@ -50,6 +50,9 @@ class CollisionChecker:
 
         # produce boundary overlay
         self.boundary_overlay = self._create_boundary_overlay()
+
+        # Prebuild overlay surfaces for fast rendering
+        self._build_overlay_surfaces()
 
     def _create_boundary_overlay(self) -> np.ndarray:
         """
@@ -241,39 +244,35 @@ class CollisionChecker:
 
         return True
 
-    def _render_overlay(self, overlay, color):
-        """Render the overlay onto the world screen."""
+    def _build_overlay_surfaces(self) -> None:
+        """Pre-render overlay boolean grids into Pygame Surfaces for fast blitting."""
+        ppm = self.world.pixels_per_meter
+        ppf = self.discretization * ppm  # pixels per fine cell (can be float)
+        width = int(self.fine_grid_size * ppf)
+        height = int(self.fine_grid_size * ppf)
 
-        # scaling
-        pixels_per_fine_cell = self.discretization * self.world.pixels_per_meter
+        def build(overlay: np.ndarray, color: tuple[int, int, int, int]) -> pygame.Surface:
+            surf = pygame.Surface((width, height), pygame.SRCALPHA)
+            # Draw only once; use integers for rects as pygame prefers ints.
+            for row in range(self.fine_grid_size):
+                y = int(row * ppf)
+                for col in range(self.fine_grid_size):
+                    if overlay[row, col]:
+                        x = int(col * ppf)
+                        rect = pygame.Rect(x, y, int(ppf), int(ppf))
+                        pygame.draw.rect(surf, color, rect)
+            return surf
 
-        # occupied cell surface
-        overlay_surface = pygame.Surface(
-            (self.fine_grid_size * pixels_per_fine_cell,
-             self.fine_grid_size * pixels_per_fine_cell),
-            pygame.SRCALPHA
-        )
-
-        # draw each occupied cell as a small rectangle
-        for row in range(self.fine_grid_size):
-            for col in range(self.fine_grid_size):
-                if overlay[row, col]:
-                    rect = pygame.Rect(
-                        col * pixels_per_fine_cell,
-                        row * pixels_per_fine_cell,
-                        pixels_per_fine_cell,
-                        pixels_per_fine_cell
-                    )
-                    pygame.draw.rect(overlay_surface, color, rect)
-
-        # Blit onto the world screen
-        self.world.screen.blit(overlay_surface, (0, 0))
+        self._loose_surface = build(self.loose_overlay, LOOSE_OVERLAY_COLOR)
+        self._tight_surface = build(self.tight_overlay, TIGHT_OVERLAY_COLOR)
+        self._boundary_surface = build(self.boundary_overlay, BOUNDARY_OVERLAY_COLOR)
 
     def render_loose_overlay(self):
-        self._render_overlay(self.loose_overlay, LOOSE_OVERLAY_COLOR)
+        # Fast path: just blit the prebuilt surface
+        self.world.screen.blit(self._loose_surface, (0, 0))
 
     def render_tight_overlay(self):
-        self._render_overlay(self.tight_overlay, TIGHT_OVERLAY_COLOR)
+        self.world.screen.blit(self._tight_surface, (0, 0))
 
     def render_boundary_overlay(self):
-        self._render_overlay(self.boundary_overlay, BOUNDARY_OVERLAY_COLOR)
+        self.world.screen.blit(self._boundary_surface, (0, 0))

@@ -58,18 +58,18 @@ CAR = VehicleSpec(
 )
 
 """MODIFY THIS TO SET UP THE SIMULATION"""
-vehicle = Vehicle(ROBOT)
-# vehicle = Vehicle(CAR)
+# vehicle = Vehicle(ROBOT)
+vehicle = Vehicle(CAR)
 
 # world = World(PARKING_LOT_1)
-world = World(PARKING_LOT_2)
+# world = World(PARKING_LOT_2)
 # world = World(PARKING_LOT_3)
-# world = World(PARKING_LOT_4)
+world = World(PARKING_LOT_4)
 # world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
-# RENDER_OVERLAY = True
-RENDER_OVERLAY = False
+RENDER_OVERLAY = True
+# RENDER_OVERLAY = False
 """"""
 
 collision = CollisionChecker(world, vehicle.spec)
