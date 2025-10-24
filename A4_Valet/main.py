@@ -29,6 +29,7 @@ ROBOT = VehicleSpec(
     cruising_velocity=3.0,  # A speedy little burrito carrier
     w_max=math.pi / 2,
     max_steering_angle=0.0,  # Irrelevant for a diff drive robot
+    max_acceleration=2.0,  # m/s^2
     track_width=0.57,  # Assumed the same as the vehicle
     origin=Pos(x=1.5, y=1.5, heading=math.pi / 2),
     destination=Pos(x=28.7, y=34.5, heading=0.0),
@@ -44,8 +45,9 @@ CAR = VehicleSpec(
     wheelbase=2.8,
     cargo_manifest="Donuts",
     cruising_velocity=6.0,  # The donut carrier is faster than the burrito carrier
-    w_max=math.pi / 2,  # Looser turning rate as we are constrained by steering
+    w_max=0.0,  # Constrained by steering
     max_steering_angle=math.radians(35),  # Typical steering for a passenger car
+    max_acceleration=3.0,  # m/s^2
     track_width=1.8,
     origin=Pos(x=1.5, y=3.0, heading=math.pi / 2),
     destination=Pos(x=27.0, y=34.5, heading=0.0),

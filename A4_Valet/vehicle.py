@@ -17,6 +17,7 @@ VEHICLE_FRONT_STRIPE_COLOR = (255, 255, 255, 180)
 DESTINATION_COLOR = (90, 200, 90, 100)
 BREADCRUMB_COLOR = (255, 0, 0)
 
+EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 
 class KinematicModel(Enum):
     DIFF_DRIVE = "diff_drive"
@@ -33,6 +34,7 @@ class VehicleSpec:
     cruising_velocity: float  # m/s
     w_max: float  # rad/s
     max_steering_angle: float  # rad
+    max_acceleration: float  # m/s²
     origin: Pos
     destination: Pos
     safety_margin: float
@@ -52,7 +54,8 @@ class Vehicle:
 
         # For diff-drive: linear and angular velocities
         # For Ackermann: linear velocity and steering angle
-        self._v = 0.0
+        self._v_desired = 0.0  # Desired velocity from controller
+        self._v_actual = 0.0   # Actual velocity (affected by acceleration limits)
         self._w_or_delta = 0.0  # w for diff-drive, delta (steering angle) for Ackermann
 
         # Persistent breadcrumbs trail; stored in pixels to avoid recalculation in render.
@@ -66,13 +69,13 @@ class Vehicle:
         For Ackermann: v is linear velocity, w is treated as desired angular velocity
                        (converted to steering angle internally)
         """
-        self._v = v
+        self._v_desired = v
 
         if self.spec.kinematic_model == KinematicModel.ACKERMANN:
             # Convert desired angular velocity to steering angle
             # For Ackermann: w = v * tan(delta) / L
             # Therefore: delta = atan(w * L / v)
-            if abs(v) > 1e-6:
+            if abs(v) > EPSILON:
                 tan_delta = w * self.spec.wheelbase / v
                 # Clamp to steering limits
                 tan_steering = math.tan(self.spec.max_steering_angle)
@@ -90,7 +93,18 @@ class Vehicle:
 
     def drive(self, delta_time: float, world: World):
         """Integrate vehicle motion based on kinematic model"""
-        v = self._v
+        # Apply acceleration limits to reach the desired velocity
+        v_error = self._v_desired - self._v_actual
+        max_delta_v = self.spec.max_acceleration * delta_time
+        
+        if abs(v_error) <= max_delta_v:
+            # Can reach the desired velocity in this time step
+            self._v_actual = self._v_desired
+        else:
+            # Accelerate/decelerate at max rate
+            self._v_actual += math.copysign(max_delta_v, v_error)
+        
+        v = self._v_actual
         th = self.pos.heading
 
         # determine angular velocity based on the kinematic model
@@ -98,7 +112,7 @@ class Vehicle:
             # For Ackermann: compute w from steering angle
             # w = v * tan(delta) / L
             delta = self._w_or_delta
-            if abs(delta) < 1e-8:
+            if abs(delta) < EPSILON:
                 w = 0.0
             else:
                 w = v * math.tan(delta) / self.spec.wheelbase
@@ -107,7 +121,7 @@ class Vehicle:
             w = self._w_or_delta
 
         # integrate motion using unicycle model, applies regardless of kinematic model
-        if abs(w) < 1e-8:  # straight line motion
+        if abs(w) < EPSILON:  # straight line motion
             new_x = self.pos.x + v * math.cos(th) * delta_time
             new_y = self.pos.y + v * math.sin(th) * delta_time
             self.pos = Pos(new_x, new_y, th)
@@ -124,7 +138,7 @@ class Vehicle:
         """Update breadcrumbs trail"""
         ppm = world.pixels_per_meter
         px, py = int(self.pos.x * ppm), int(self.pos.y * ppm)
-        self.breadcrumbs.append(((px, py), self._v))
+        self.breadcrumbs.append(((px, py), self._v_actual))
 
     def render(self, world: World, pos: Optional[Pos] = None):
         """Render vehicle at current or specified position with optional color override"""

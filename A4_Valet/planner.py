@@ -44,6 +44,7 @@ THETA_RESOLUTION = math.pi / 6  # ~30 deg
 MAX_ITERATIONS = 30000
 PROGRESS_INTERVAL = 1000
 
+EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 
 @dataclass
 class MotionPrimitive:
@@ -56,7 +57,7 @@ class MotionPrimitive:
         """Generate path points as Pos objects and end state for this primitive"""
         path_points = []
 
-        if abs(self.curvature) < 1e-6:  # straight line
+        if abs(self.curvature) < EPSILON:  # straight line
             for i in range(self.num_steps + 1):
                 s = (i / self.num_steps) * self.arc_length
                 x = state.x + s * math.cos(state.heading)

@@ -15,9 +15,9 @@ from typing import List, Tuple
 from vehicle import Vehicle
 from world import Pos
 
-BRAKING_DISTANCE = 1.5  # TODO: derive from cruising velocity?
 POS_ERROR_THRESHOLD = 0.1
 
+EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 
 class PathFollower:
     def __init__(
@@ -30,6 +30,12 @@ class PathFollower:
         self.route = route
         self.lookahead = lookahead
         self.wheel_speed_max = self.vehicle.spec.cruising_velocity * 1.5
+        
+        # Compute braking distance
+        self.braking_distance = (self.vehicle.spec.cruising_velocity ** 2) / (2 * self.vehicle.spec.max_acceleration)
+        
+        # Compute acceleration distance
+        self.acceleration_distance = self.braking_distance
 
         # Precompute cumulative arc lengths
         self.cumulative_arc_lengths = [0.0]
@@ -121,7 +127,7 @@ class PathFollower:
 
         # Clamp velocity: keep cruise unless curvature forces a limit
         # TODO: consider clamping centripetal acceleration too? IRL this can cause rolling over on uneven pavement
-        v_limit_turn = w_max_at_cruise / max(1e-6, abs(kappa))
+        v_limit_turn = w_max_at_cruise / max(EPSILON, abs(kappa))
         v = min(self.vehicle.spec.cruising_velocity, v_limit_turn)
 
         w = v * kappa
@@ -136,15 +142,21 @@ class PathFollower:
             # TODO: consider checking each wheels individually to avoid any corner cases
         else:
             # For Ackermann: constrain angular velocity based on current speed and max steering
-            if abs(v) > 1e-6:
+            if abs(v) > EPSILON:
                 w_max_current = abs(v) * math.tan(self.vehicle.spec.max_steering_angle) / self.vehicle.spec.wheelbase
                 w = max(-w_max_current, min(w_max_current, w))
 
+        # Acceleration ramp at the beginning of the path
+        if self.traveled <= self.acceleration_distance:
+            # Ensure minimum velocity to get started
+            accel_scale = math.sqrt(self.traveled / self.acceleration_distance) if self.traveled > 0 else 0.1
+            v *= max(accel_scale, 0.1)  # At least 10% speed to get started
+
         # Braking as we approach the end of the path
         distance_to_path_end = self.total_arc_length - self.traveled
-        if distance_to_path_end <= BRAKING_DISTANCE:
-            scale = max(0.0, distance_to_path_end / BRAKING_DISTANCE)
-            v *= scale
+        if distance_to_path_end <= self.braking_distance:
+            brake_scale = math.sqrt(distance_to_path_end / self.braking_distance)
+            v *= max(brake_scale, 0.05)  # Minimum 5% speed while braking
 
         # Stop when very close to the end of the trajectory
         if distance_to_path_end <= POS_ERROR_THRESHOLD:
