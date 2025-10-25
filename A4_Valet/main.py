@@ -11,8 +11,15 @@ from collision import CollisionChecker
 from follower import PathFollower
 from vehicle import VehicleSpec, TrailerSpec, Vehicle, KinematicModel
 from world import World, Pos
-from world import PARKING_LOT_1, PARKING_LOT_2, PARKING_LOT_3, PARKING_LOT_4, EMPTY_PARKING_LOT, \
+from world import (
+    PARKING_LOT_1,
+    PARKING_LOT_2,
+    PARKING_LOT_3,
+    PARKING_LOT_4,
+    PARKING_LOT_5,
+    EMPTY_PARKING_LOT,
     EMPTY_PARKING_LOT_FOR_TRAILER
+)
 from planner import plan
 
 # TODO: refactor prints into log statements
@@ -62,11 +69,11 @@ TRUCK = VehicleSpec(
     width=2.0,
     wheelbase=3.4,
     track_width=1.8,
-    cargo_manifest="Dimensional lumberjacks",
-    cruising_velocity=4.0,  # A bit slower than a car
+    cargo_manifest="Old refrigerators and dimensional lumberjacks",
+    cruising_velocity=3.0,  # A bit slower than a car
     w_max=0.0,
-    max_steering_angle=math.radians(35),
-    max_acceleration=2.0,  # m/s^2, also a bit slower than a car
+    max_steering_angle=math.radians(25),
+    max_acceleration=1.5,  # m/s^2, also a bit slower than a car
     origin=Pos(x=1.5, y=10.0, heading=math.pi / 2),
     destination=Pos(x=27.0, y=34.5, heading=0.0),
     safety_margin=0.1,
@@ -89,11 +96,12 @@ vehicle = Vehicle(TRUCK)
 # world = World(PARKING_LOT_2)
 # world = World(PARKING_LOT_3)
 # world = World(PARKING_LOT_4)
+world = World(PARKING_LOT_5)
 # world = World(EMPTY_PARKING_LOT)
-world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
+# world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
-RENDER_OVERLAY = True
-# RENDER_OVERLAY = False
+# RENDER_OVERLAY = True
+RENDER_OVERLAY = False
 """"""
 
 collision = CollisionChecker(world, vehicle.spec)

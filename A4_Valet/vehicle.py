@@ -15,6 +15,7 @@ VEHICLE_BG_COLOR = (56, 67, 205)
 VEHICLE_FRONT_STRIPE_COLOR = (255, 255, 255, 180)
 DESTINATION_COLOR = (90, 200, 90, 100)
 BREADCRUMB_COLOR = (255, 0, 0)
+TRAILER_BREADCRUMB_COLOR = (100, 100, 100)
 HITCH_COLOR = (0, 0, 0)
 
 EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
@@ -71,12 +72,14 @@ class Vehicle:
 
         # Trailer state (if equipped)
         self.trailer_heading: Optional[float] = None
+        self.trailer_pos: Optional[Pos] = None
         if self.spec.trailer is not None:
             self.trailer_heading = spec.origin.heading
+            self.trailer_pos = self._compute_trailer_position(self.trailer_heading)
 
-        # Persistent breadcrumbs trail; stored in pixels to avoid recalculation in render.
-        # Adds velocity to reflect how fast the robot was moving at each point.
+        # Persistent breadcrumbs trail
         self.breadcrumbs: List[Tuple[Tuple[int, int], float]] = []
+        self.trailer_breadcrumbs: List[Tuple[Tuple[int, int], float]] = []
 
     def set_velocities(self, v: float, w: float):
         """
@@ -154,9 +157,27 @@ class Vehicle:
 
         self._update_breadcrumbs(world)
 
+    def _compute_trailer_position(self, trailer_heading: float) -> Pos:
+        """
+        Compute trailer position given a trailer heading.
+        Uses the hitch constraint: trailer is d1 meters behind hitch point.
+        """
+        d1 = self.spec.trailer.hitch_length
+        truck_th = self.pos.heading
+
+        # Hitch point at the rear of the truck
+        hitch_x = self.pos.x - (self.spec.length / 2) * math.cos(truck_th)
+        hitch_y = self.pos.y - (self.spec.length / 2) * math.sin(truck_th)
+
+        # Trailer position is d1 meters from the hitch along trailer's heading
+        trailer_x = hitch_x - d1 * math.cos(trailer_heading)
+        trailer_y = hitch_y - d1 * math.sin(trailer_heading)
+
+        return Pos(trailer_x, trailer_y, trailer_heading)
+
     def _update_trailer(self, v: float, delta_time: float):
-        """Update trailer heading based on truck motion."""
-        if self.spec.trailer is None or self.trailer_heading is None:
+        """Update trailer heading and position based on truck motion"""
+        if self.spec.trailer is None or self.trailer_heading is None or self.trailer_pos is None:
             return
 
         d1 = self.spec.trailer.hitch_length
@@ -167,30 +188,22 @@ class Vehicle:
         dphi_dt = (v / d1) * math.sin(theta_0 - phi)
 
         # Integrate to get the new trailer heading
-        self.trailer_heading = self._wrap_angle(phi + dphi_dt * delta_time)
+        new_phi = self._wrap_angle(phi + dphi_dt * delta_time)
 
-    def get_trailer_position(self) -> Optional[Pos]:
-        """
-        Calculate the position of the trailer's center.
-        The hitch point is at the rear of the truck body, and the trailer axle
-        is at distance d1 from the hitch point along the trailer's heading.
-        """
-        if self.spec.trailer is None or self.trailer_heading is None:
-            return None
-
-        # Calculate hitch point at the rear of the truck
+        # Now update the trailer POSITION based on the hitch constraint
+        # The hitch point on the truck
         truck_th = self.pos.heading
         hitch_x = self.pos.x - (self.spec.length / 2) * math.cos(truck_th)
         hitch_y = self.pos.y - (self.spec.length / 2) * math.sin(truck_th)
 
-        # Calculate trailer axle position (d1 from hitch, along trailer heading)
-        d1 = self.spec.trailer.hitch_length
-        phi = self.trailer_heading
-        trailer_axle_x = hitch_x - d1 * math.cos(phi)
-        trailer_axle_y = hitch_y - d1 * math.sin(phi)
+        # The trailer must be positioned so its front (at distance d1) is at the hitch
+        # Trailer position (center/axle) is d1 meters from hitch along trailer's NEW heading
+        new_trailer_x = hitch_x - d1 * math.cos(new_phi)
+        new_trailer_y = hitch_y - d1 * math.sin(new_phi)
 
-        # Trailer center is at its axle (since axle is at midpoint)
-        return Pos(trailer_axle_x, trailer_axle_y, phi)
+        # Update trailer state
+        self.trailer_heading = new_phi
+        self.trailer_pos = self._compute_trailer_position(new_phi)
 
     def _update_breadcrumbs(self, world: World):
         """Update breadcrumbs trail"""
@@ -198,14 +211,17 @@ class Vehicle:
         px, py = int(self.pos.x * ppm), int(self.pos.y * ppm)
         self.breadcrumbs.append(((px, py), self._v_actual))
 
+        # Add trailer breadcrumbs if equipped
+        if self.trailer_pos is not None:
+            trailer_px = int(self.trailer_pos.x * ppm)
+            trailer_py = int(self.trailer_pos.y * ppm)
+            self.trailer_breadcrumbs.append(((trailer_px, trailer_py), self._v_actual))
+
     def render(self, world: World, pos: Optional[Pos] = None):
         """Render vehicle at current or specified position"""
-        # Render the trailer first (if equipped) so it appears behind the truck
-        # TODO: validate that the order of rendering is correct and matters
         if self.spec.trailer is not None and pos is None:
-            trailer_pos = self.get_trailer_position()
-            if trailer_pos is not None:
-                self._render_trailer(world, trailer_pos)
+            if self.trailer_pos is not None:
+                self._render_trailer(world, self.trailer_pos)
 
         ppm = world.pixels_per_meter
         Lpx = int(self.spec.length * ppm)
@@ -286,9 +302,12 @@ class Vehicle:
         pygame.draw.line(world.screen, HITCH_COLOR, (hitch_px, hitch_py), (trailer_px, trailer_py), 2)
 
     def render_breadcrumbs(self, world: World):
-        """Max velocity is not controlled for <= 0"""
+        """Render breadcrumbs for truck and trailer"""
         for (px, py), v in self.breadcrumbs:
             pygame.draw.circle(world.screen, BREADCRUMB_COLOR, (px, py), max(1, int(v)))
+
+        for (px, py), v in self.trailer_breadcrumbs:
+            pygame.draw.circle(world.screen, TRAILER_BREADCRUMB_COLOR, (px, py), max(1, int(v)))
 
     def render_parking_zone(self, world):
         """
