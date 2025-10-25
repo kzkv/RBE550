@@ -20,6 +20,8 @@ from typing import List, Tuple, Optional, Set
 from dataclasses import dataclass, field
 from itertools import product
 
+from vehicle import Vehicle
+
 from collision import CollisionChecker
 from world import Pos
 from vehicle import VehicleSpec
@@ -276,6 +278,24 @@ def plan(
             if new_key in visited:
                 continue
 
+            # For vehicles with trailers: integrate trailer kinematics along this segment
+            # to verify it's physically feasible
+            if vehicle_spec.trailer is not None:
+                # Get the trailer heading from current state
+                # For now, we need to track trailer heading in the search state
+                # Simplification: use the previous truck heading as initial trailer heading
+                initial_trailer_heading = current.state.heading
+                
+                # Integrate trailer along this path segment
+                trailer_segment = Vehicle.integrate_trailer_along_path(
+                    path_segment,
+                    initial_trailer_heading,
+                    vehicle_spec
+                )
+                
+                # TODO Milestone 2: Check trailer_segment for collisions
+                # For now, just compute it for visualization
+            
             if not collision_checker.is_path_collision_free(path_segment):
                 continue
 

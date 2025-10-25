@@ -75,7 +75,7 @@ class Vehicle:
         self.trailer_pos: Optional[Pos] = None
         if self.spec.trailer is not None:
             self.trailer_heading = spec.origin.heading
-            self.trailer_pos = self._compute_trailer_position(self.trailer_heading)
+            self.trailer_pos = self._compute_trailer_position(self.trailer_heading, self.spec, self.pos)
 
         # Persistent breadcrumbs trail
         self.breadcrumbs: List[Tuple[Tuple[int, int], float]] = []
@@ -109,6 +109,54 @@ class Vehicle:
     def _wrap_angle(angle):
         """Wrap to [-pi, pi] to ensure the minimal signed turn"""
         return (angle + math.pi) % (2 * math.pi) - math.pi
+
+    @staticmethod
+    def _update_trailer_heading(
+            truck_heading: float,
+            trailer_heading: float,
+            velocity: float,
+            hitch_length: float,
+            dt: float
+    ) -> float:
+        """Update trailer heading using kinematics. Returns the new trailer heading."""
+        theta_0 = truck_heading
+        phi = trailer_heading
+        dphi_dt = (velocity / hitch_length) * math.sin(theta_0 - phi)
+        new_phi = Vehicle._wrap_angle(phi + dphi_dt * dt)
+        return new_phi
+
+    @staticmethod
+    def _compute_trailer_position(trailer_heading: float, vehicle_spec: VehicleSpec, vehicle_pos: Pos) -> Pos:
+        """
+        Compute the trailer position given a trailer heading.
+        Uses the hitch constraint: trailer is d1 meters behind hitch point.
+        """
+
+        hitch_x = vehicle_pos.x - (vehicle_spec.length / 2) * math.cos(vehicle_pos.heading)
+        hitch_y = vehicle_pos.y - (vehicle_spec.length / 2) * math.sin(vehicle_pos.heading)
+
+        hitch_length = vehicle_spec.trailer.hitch_length
+        trailer_x = hitch_x - hitch_length * math.cos(trailer_heading)
+        trailer_y = hitch_y - hitch_length * math.sin(trailer_heading)
+        return Pos(trailer_x, trailer_y, trailer_heading)
+
+    def _update_trailer(self, v: float, delta_time: float):
+        """Update trailer heading and position based on truck motion"""
+        if self.spec.trailer is None or self.trailer_heading is None or self.trailer_pos is None:
+            return
+
+        # Update trailer heading using kinematic equation
+        new_heading = self._update_trailer_heading(
+            self.pos.heading,
+            self.trailer_heading,
+            v,
+            self.spec.trailer.hitch_length,
+            delta_time
+        )
+
+        # Update trailer position
+        self.trailer_pos = self._compute_trailer_position(new_heading, self.spec, self.pos)
+        self.trailer_heading = new_heading
 
     def drive(self, delta_time: float, world: World):
         """Integrate vehicle motion based on the kinematic model"""
@@ -156,54 +204,6 @@ class Vehicle:
             self._update_trailer(v, delta_time)
 
         self._update_breadcrumbs(world)
-
-    def _compute_trailer_position(self, trailer_heading: float) -> Pos:
-        """
-        Compute trailer position given a trailer heading.
-        Uses the hitch constraint: trailer is d1 meters behind hitch point.
-        """
-        d1 = self.spec.trailer.hitch_length
-        truck_th = self.pos.heading
-
-        # Hitch point at the rear of the truck
-        hitch_x = self.pos.x - (self.spec.length / 2) * math.cos(truck_th)
-        hitch_y = self.pos.y - (self.spec.length / 2) * math.sin(truck_th)
-
-        # Trailer position is d1 meters from the hitch along trailer's heading
-        trailer_x = hitch_x - d1 * math.cos(trailer_heading)
-        trailer_y = hitch_y - d1 * math.sin(trailer_heading)
-
-        return Pos(trailer_x, trailer_y, trailer_heading)
-
-    def _update_trailer(self, v: float, delta_time: float):
-        """Update trailer heading and position based on truck motion"""
-        if self.spec.trailer is None or self.trailer_heading is None or self.trailer_pos is None:
-            return
-
-        d1 = self.spec.trailer.hitch_length
-        theta_0 = self.pos.heading
-        phi = self.trailer_heading
-
-        # Compute the trailer heading's rate of change
-        dphi_dt = (v / d1) * math.sin(theta_0 - phi)
-
-        # Integrate to get the new trailer heading
-        new_phi = self._wrap_angle(phi + dphi_dt * delta_time)
-
-        # Now update the trailer POSITION based on the hitch constraint
-        # The hitch point on the truck
-        truck_th = self.pos.heading
-        hitch_x = self.pos.x - (self.spec.length / 2) * math.cos(truck_th)
-        hitch_y = self.pos.y - (self.spec.length / 2) * math.sin(truck_th)
-
-        # The trailer must be positioned so its front (at distance d1) is at the hitch
-        # Trailer position (center/axle) is d1 meters from hitch along trailer's NEW heading
-        new_trailer_x = hitch_x - d1 * math.cos(new_phi)
-        new_trailer_y = hitch_y - d1 * math.sin(new_phi)
-
-        # Update trailer state
-        self.trailer_heading = new_phi
-        self.trailer_pos = self._compute_trailer_position(new_phi)
 
     def _update_breadcrumbs(self, world: World):
         """Update breadcrumbs trail"""
@@ -326,3 +326,53 @@ class Vehicle:
         radius_px = int(radius * ppm)
 
         pygame.draw.circle(world.screen, DESTINATION_COLOR, (dest_px, dest_py), radius_px, width=1)
+
+    @staticmethod
+    def integrate_trailer_along_path(
+            truck_path: List[Pos],
+            initial_trailer_heading: float,
+            vehicle_spec: VehicleSpec,
+    ) -> List[Pos]:
+        """
+        Integrate trailer kinematics along a truck path.
+        Returns the trailer positions corresponding to each truck position.
+        """
+        if vehicle_spec.trailer is None:
+            return []
+
+        trailer_path = []
+        trailer_heading = initial_trailer_heading
+        d1 = vehicle_spec.trailer.hitch_length
+
+        for i, truck_pos in enumerate(truck_path):
+            # Compute hitch and trailer positions using helper methods
+            trailer_pos = Vehicle._compute_trailer_position(trailer_heading, vehicle_spec, truck_pos)
+            trailer_path.append(trailer_pos)
+
+            # Update trailer heading for next step
+            if i < len(truck_path) - 1:
+                next_truck = truck_path[i + 1]
+                dx = next_truck.x - truck_pos.x
+                dy = next_truck.y - truck_pos.y
+                dist = math.hypot(dx, dy)
+
+                # Skip update if points are too close (avoid numerical issues)
+                if dist < EPSILON:
+                    continue
+
+                # Estimate time step and velocity
+                dt = dist / vehicle_spec.cruising_velocity
+                if dt < EPSILON:
+                    continue
+                v = dist / dt
+
+                # Update trailer heading using helper method
+                trailer_heading = Vehicle._update_trailer_heading(
+                    truck_pos.heading,
+                    trailer_heading,
+                    v,
+                    d1,
+                    dt
+                )
+
+        return trailer_path

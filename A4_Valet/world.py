@@ -23,6 +23,7 @@ OBSTACLE_BG_COLOR = (100, 100, 100)
 HUD_BG_COLOR = (0, 0, 0)
 HUD_FONT_COLOR = (200, 200, 200)
 ROUTE_COLOR = (90, 200, 90)
+TRAILER_ROUTE_COLOR = (200, 90, 200)  # Purple for trailer path
 
 # I started with a randomized field, but it was not presenting a consistent and interesting challenge
 # Also, there was no reason to produce a randomized field to then persist it to eliminate run-to-run variation.
@@ -238,8 +239,8 @@ class World:
         if in_bounds:  # Assumes the cursor is always within bounds
             self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
 
-    def render_route(self, route: List[Pos]):
+    def render_route(self, route: List[Pos], color: Tuple[int, int, int]):
         if len(route) < 2:
             return  # Need at least 2 points to draw a line
         pts = [(int(pos.x * PIXELS_PER_METER), int(pos.y * PIXELS_PER_METER)) for pos in route]
-        pygame.draw.lines(self.screen, ROUTE_COLOR, False, pts, 2)
+        pygame.draw.lines(self.screen, color, False, pts, 2)

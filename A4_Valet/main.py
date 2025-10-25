@@ -96,9 +96,9 @@ vehicle = Vehicle(TRUCK)
 # world = World(PARKING_LOT_2)
 # world = World(PARKING_LOT_3)
 # world = World(PARKING_LOT_4)
-world = World(PARKING_LOT_5)
+# world = World(PARKING_LOT_5)
 # world = World(EMPTY_PARKING_LOT)
-# world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
+world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
 # RENDER_OVERLAY = True
 RENDER_OVERLAY = False
@@ -131,6 +131,17 @@ if route is None:
     route = [vehicle.spec.origin]
 
 full_route = route
+
+# Compute trailer route if vehicle has trailer
+trailer_route = None
+if vehicle.spec.trailer is not None and len(route) > 1:
+    print("Computing trailer path from truck path...")
+    trailer_route = Vehicle.integrate_trailer_along_path(
+        route,
+        vehicle.spec.origin.heading,  # Initial trailer heading (aligned with truck)
+        vehicle.spec
+    )
+    print(f"  Trailer path: {len(trailer_route)} waypoints")
 
 follower = PathFollower(
     full_route,
@@ -167,10 +178,16 @@ while running:
         collision.render_tight_overlay()
 
     if len(route) > 1:  # We actually have a route to follow
+        from world import ROUTE_COLOR, TRAILER_ROUTE_COLOR
+
         follower.update()
         vehicle.drive(delta_time, world)
         world.render_hud(vehicle_location=vehicle.pos, destination=vehicle.spec.destination)
-        world.render_route(full_route)
+        world.render_route(full_route, ROUTE_COLOR)  # Truck route in green
+
+        # Render trailer route in purple
+        if trailer_route is not None:
+            world.render_route(trailer_route, TRAILER_ROUTE_COLOR)
     else:
         world.render_hud(message="NO PATH FOUND!")
 
