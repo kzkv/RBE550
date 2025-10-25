@@ -17,6 +17,7 @@ from world import (
     PARKING_LOT_3,
     PARKING_LOT_4,
     PARKING_LOT_5,
+    PARKING_LOT_6,
     EMPTY_PARKING_LOT,
     EMPTY_PARKING_LOT_FOR_TRAILER
 )
@@ -72,13 +73,13 @@ TRUCK = VehicleSpec(
     cargo_manifest="Old refrigerators and dimensional lumberjacks",
     cruising_velocity=3.0,  # A bit slower than a car
     w_max=0.0,
-    max_steering_angle=math.radians(25),
+    max_steering_angle=math.radians(35),
     max_acceleration=1.5,  # m/s^2, also a bit slower than a car
-    origin=Pos(x=1.5, y=10.0, heading=math.pi / 2),
+    origin=Pos(x=3.5, y=10.5, heading=math.pi / 2),
     destination=Pos(x=27.0, y=34.5, heading=0.0),
     safety_margin=0.1,
     planned_xy_error=1.2,
-    planned_heading_error=math.radians(90),
+    planned_heading_error=math.radians(120),
     kinematic_model=KinematicModel.ACKERMANN,
     trailer=TrailerSpec(
         length=4.5,
@@ -97,11 +98,12 @@ vehicle = Vehicle(TRUCK)
 # world = World(PARKING_LOT_3)
 # world = World(PARKING_LOT_4)
 # world = World(PARKING_LOT_5)
+world = World(PARKING_LOT_6)
 # world = World(EMPTY_PARKING_LOT)
-world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
+# world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
-# RENDER_OVERLAY = True
-RENDER_OVERLAY = False
+RENDER_OVERLAY = True
+# RENDER_OVERLAY = False
 """"""
 
 collision = CollisionChecker(world, vehicle.spec)

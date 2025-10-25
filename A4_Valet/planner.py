@@ -279,25 +279,23 @@ def plan(
                 continue
 
             # For vehicles with trailers: integrate trailer kinematics along this segment
-            # to verify it's physically feasible
+            # Collision checking: with or without trailer
             if vehicle_spec.trailer is not None:
-                # Get the trailer heading from current state
-                # For now, we need to track trailer heading in the search state
-                # Simplification: use the previous truck heading as initial trailer heading
+                # Integrate trailer kinematics for this segment
                 initial_trailer_heading = current.state.heading
-                
-                # Integrate trailer along this path segment
                 trailer_segment = Vehicle.integrate_trailer_along_path(
                     path_segment,
                     initial_trailer_heading,
                     vehicle_spec
                 )
                 
-                # TODO Milestone 2: Check trailer_segment for collisions
-                # For now, just compute it for visualization
-            
-            if not collision_checker.is_path_collision_free(path_segment):
-                continue
+                # Check collisions for both truck and trailer
+                if not collision_checker.is_path_collision_free_with_trailer(path_segment, trailer_segment):
+                    continue
+            else:
+                # Truck only
+                if not collision_checker.is_path_collision_free(path_segment):
+                    continue
 
             arc_bias_penalty = ARC_LENGTH_BIAS_WEIGHT * (1.0 - primitive.arc_length / MAX_ARC_LENGTH)
 

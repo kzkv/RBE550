@@ -151,15 +151,16 @@ class CollisionChecker:
         """Check if position is in the boundary danger zone"""
         return self._check_collision_at_xy(self.boundary_overlay, pos)
 
-    def _get_obb_corners(self, pos: Pos) -> List[Tuple[float, float]]:
-        """Compute the four corners of an oriented bounding box for the vehicle at a given position."""
+    @staticmethod
+    def _get_obb_corners(pos: Pos, length: float, width: float) -> List[Tuple[float, float]]:
+        """Compute the four corners of an oriented bounding box for a rectangular body."""
         cos_h = math.cos(pos.heading)
         sin_h = math.sin(pos.heading)
 
-        half_length = self.vehicle_spec.length / 2
-        half_width = self.vehicle_spec.width / 2
+        half_length = length / 2
+        half_width = width / 2
 
-        # Corners in vehicle frame: front-right, front-left, back-left, back-right
+        # Corners in body frame: front-right, front-left, back-left, back-right
         local_corners = [
             (half_length, half_width),
             (half_length, -half_width),
@@ -176,12 +177,15 @@ class CollisionChecker:
 
         return world_corners
 
-    def check_obb_collision(self, pos: Pos) -> bool:
-        """
-        Check if the oriented bounding box at position collides with obstacles.
-        This is the most precise but also most expensive collision check.
-        """
-        corners = self._get_obb_corners(pos)
+    def check_obb_collision(self, pos: Pos, length: float = None, width: float = None) -> bool:
+        """Check if an oriented bounding box at position collides with obstacles."""
+        # Use vehicle dimensions as defaults
+        if length is None:
+            length = self.vehicle_spec.length
+        if width is None:
+            width = self.vehicle_spec.width
+        
+        corners = self._get_obb_corners(pos, length, width)
 
         # Check all four corners
         for cx, cy in corners:
@@ -276,3 +280,57 @@ class CollisionChecker:
 
     def render_boundary_overlay(self):
         self.world.screen.blit(self._boundary_surface, (0, 0))
+
+    def is_path_collision_free_with_trailer(
+        self, 
+        truck_path: List[Pos], 
+        trailer_path: List[Pos]
+    ) -> bool:
+        """
+        Four-tier collision checking for paths with trailer.
+        Checks both truck and trailer at each corresponding point.
+        """
+        if len(truck_path) != len(trailer_path):
+            raise ValueError(f"Path length mismatch: truck={len(truck_path)}, trailer={len(trailer_path)}")
+        
+        obb_check_needed = []
+
+        for i, truck_pos in enumerate(truck_path):
+            trailer_pos = trailer_path[i]
+            
+            # Tier 1: Loose overlay check for both
+            truck_loose = self.check_loose(truck_pos)
+            trailer_loose = self.check_loose(trailer_pos)
+            
+            if not truck_loose and not trailer_loose:
+                # Both clear - check if near boundary
+                if self.check_boundary(truck_pos) or self.check_boundary(trailer_pos):
+                    obb_check_needed.append(i)
+                continue
+
+            # Tier 3: Tight overlay check
+            if self.check_tight(truck_pos) or self.check_tight(trailer_pos):
+                # At least one definitely collides
+                return False
+
+            # Tier 4: Ambiguous - needs OBB
+            obb_check_needed.append(i)
+
+        # Perform OBB checks for ambiguous points
+        for i in obb_check_needed:
+            truck_pos = truck_path[i]
+            trailer_pos = trailer_path[i]
+            
+            # Check truck with its dimensions
+            if self.check_obb_collision(truck_pos, self.vehicle_spec.length, self.vehicle_spec.width):
+                return False
+            
+            # Check trailer with its dimensions
+            if self.check_obb_collision(
+                trailer_pos, 
+                self.vehicle_spec.trailer.length, 
+                self.vehicle_spec.trailer.width
+            ):
+                return False
+
+        return True
