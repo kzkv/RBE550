@@ -24,7 +24,7 @@ from vehicle import Vehicle
 
 from collision import CollisionChecker
 from world import Pos
-from vehicle import VehicleSpec
+from vehicle import VehicleSpec, KinematicModel
 
 pi = math.pi
 
@@ -100,8 +100,6 @@ class MotionPrimitive:
 
 def create_motion_primitives(vehicle_spec: VehicleSpec) -> List[MotionPrimitive]:
     """Generate all motion primitive combinations"""
-    from vehicle import KinematicModel
-
     if vehicle_spec.kinematic_model == KinematicModel.ACKERMANN:
         # For Ackermann: filter curvatures to respect max steering angle
         kappa_max = math.tan(vehicle_spec.max_steering_angle) / vehicle_spec.wheelbase
@@ -269,7 +267,6 @@ def plan(
             new_state, path_segment = primitive.apply(current.state)
 
             # For Ackermann vehicles: reject spin-in-place primitives (zero arc length with curvature)
-            from vehicle import KinematicModel
             if (vehicle_spec.kinematic_model == KinematicModel.ACKERMANN and
                     abs(primitive.arc_length) < 1.0 and abs(primitive.curvature) > 0.0):
                 continue

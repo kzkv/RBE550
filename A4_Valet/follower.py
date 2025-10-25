@@ -12,7 +12,7 @@ import math
 from bisect import bisect_left
 from typing import List, Tuple
 
-from vehicle import Vehicle
+from vehicle import Vehicle, KinematicModel
 from world import Pos
 
 POS_ERROR_THRESHOLD = 0.1
@@ -117,7 +117,6 @@ class PathFollower:
             kappa = 2 * y_frame / d_squared  # Turn sharpness
 
         # Compute kinematic-specific limits
-        from vehicle import KinematicModel
         if self.vehicle.spec.kinematic_model == KinematicModel.ACKERMANN:
             kappa_max = math.tan(self.vehicle.spec.max_steering_angle) / self.vehicle.spec.wheelbase
             kappa = max(-kappa_max, min(kappa_max, kappa))

@@ -45,7 +45,7 @@ class VehicleSpec:
     cruising_velocity: float  # m/s
     w_max: float  # rad/s
     max_steering_angle: float  # rad
-    max_acceleration: float  # m/s²
+    max_acceleration: float  # m/s^2
     origin: Pos
     destination: Pos
     safety_margin: float
