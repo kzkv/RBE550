@@ -112,7 +112,7 @@ collision = CollisionChecker(world, vehicle.spec)
 world.clear()
 world.render_grid()
 world.render_obstacles()
-vehicle.render(world, pos=vehicle.spec.destination)  # TODO: mention using the vehicle render as the bounding box
+vehicle.render(world, pos=vehicle.spec.destination)
 vehicle.render_parking_zone(world)
 vehicle.render(world)  # Render current position
 

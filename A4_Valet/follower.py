@@ -74,7 +74,6 @@ class PathFollower:
 
     def update(self):
         """Compute (v, w) and command the vehicle"""
-        # TODO: take into account track width
 
         # Update traveled distance based on actual vehicle position along path
         min_dist = None
@@ -107,7 +106,6 @@ class PathFollower:
         cos_t, sin_t = math.cos(self.vehicle.pos.heading), math.sin(self.vehicle.pos.heading)
         x_frame = cos_t * dx + sin_t * dy
         y_frame = -sin_t * dx + cos_t * dy
-        # TODO: consider if the target is behind the vehicle
 
         # Pure Pursuit steering law (κ = 2*y_frame / d^2; thanks, ChatGPT)
         d_squared = x_frame * x_frame + y_frame * y_frame
@@ -139,7 +137,6 @@ class PathFollower:
             w_cap = (2.0 / self.vehicle.spec.track_width) * max(0.0, self.wheel_speed_max - abs(v))
             if abs(w) > w_cap:
                 w = math.copysign(w_cap, w)  # Keep the sign, but clamp
-            # TODO: consider checking each wheel individually to avoid any corner cases
         else:
             # For Ackermann: constrain angular velocity based on current speed and max steering
             if abs(v) > EPSILON:

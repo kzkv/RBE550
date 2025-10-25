@@ -33,7 +33,7 @@ ARC_LENGTHS = [0.3, 0.75, 1.5, 3.0]
 CURVATURES = [0.0, pi / 24, -pi / 24, pi / 12, -pi / 12, pi / 6, -pi / 6]
 PRIMITIVE_STEPS = 30
 
-# Prefer longer arcs; TODO: don't forget to highlight in the report how essential this proved to be
+# Prefer longer arcs;
 ARC_LENGTH_BIAS_WEIGHT = 3.0
 MAX_ARC_LENGTH = max(ARC_LENGTHS)
 
