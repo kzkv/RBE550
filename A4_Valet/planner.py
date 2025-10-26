@@ -197,7 +197,7 @@ def reconstruct_path(node: SearchNode) -> List[Pos]:
 def plan(
         vehicle_spec: VehicleSpec,
         collision_checker: CollisionChecker,
-) -> Optional[List[Pos]]:
+) -> tuple[List[Pos], List[Pos]]:
     """A* path planning with fast overlay-based collision checking"""
     start_time = time.perf_counter()
     origin = vehicle_spec.origin
@@ -213,6 +213,7 @@ def plan(
 
     open_set = []
     visited: Set[StateKey] = set()
+    explored_segments = [] 
 
     start_node = SearchNode(
         f_score=heuristic(origin, destination),
@@ -260,7 +261,7 @@ def plan(
                 print(f"    XY error: {final_xy_error:.3f}m")
                 print(f"    Heading error: {math.degrees(final_heading_error):.3f}°")
 
-            return path
+            return (path, explored_segments)
 
         # Expand neighbors
         for primitive in primitives:
@@ -294,6 +295,10 @@ def plan(
                 if not collision_checker.is_path_collision_free(path_segment):
                     continue
 
+            # Collect collision-free segments for visualization
+            if len(path_segment) >= 2:
+                explored_segments.append(path_segment)
+
             arc_bias_penalty = ARC_LENGTH_BIAS_WEIGHT * (1.0 - primitive.arc_length / MAX_ARC_LENGTH)
 
             g_score = current.g_score + abs(primitive.arc_length) + arc_bias_penalty
@@ -314,4 +319,4 @@ def plan(
 
     elapsed_time = time.perf_counter() - start_time
     print(f"NO PATH FOUND after {nodes_expanded} nodes in {elapsed_time:.3f}s")
-    return None
+    return ([], explored_segments)

@@ -23,6 +23,7 @@ OBSTACLE_BG_COLOR = (100, 100, 100)
 HUD_BG_COLOR = (0, 0, 0)
 HUD_FONT_COLOR = (200, 200, 200)
 ROUTE_COLOR = (90, 200, 90)
+EXPLORED_ROUTE_COLOR = (220, 220, 220)
 TRAILER_ROUTE_COLOR = (200, 90, 200)  # Purple for trailer path
 
 # I started with a randomized field, but it was not presenting a consistent and interesting challenge

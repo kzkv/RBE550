@@ -15,7 +15,6 @@ from typing import List, Tuple
 from vehicle import Vehicle, KinematicModel
 from world import Pos
 
-POS_ERROR_THRESHOLD = 0.1
 
 EPSILON = 1e-8  # Numerical tolerance for floating-point comparisons
 
@@ -32,10 +31,8 @@ class PathFollower:
         self.lookahead = lookahead
         self.wheel_speed_max = self.vehicle.spec.cruising_velocity * 1.5
 
-        # Compute braking distance
+        # Compute acceleration and braking distance
         self.braking_distance = (self.vehicle.spec.cruising_velocity ** 2) / (2 * self.vehicle.spec.max_acceleration)
-
-        # Compute acceleration distance
         self.acceleration_distance = self.braking_distance
 
         # Precompute cumulative arc lengths
@@ -156,7 +153,7 @@ class PathFollower:
             v *= max(brake_scale, 0.05)  # Minimum 5% speed while braking
 
         # Stop when very close to the end of the trajectory
-        if distance_to_path_end <= POS_ERROR_THRESHOLD:
+        if distance_to_path_end <= EPSILON:
             self.we_are_there = True
             v, w = 0.0, 0.0
 

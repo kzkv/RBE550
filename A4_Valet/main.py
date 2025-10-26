@@ -10,7 +10,7 @@ import math
 from collision import CollisionChecker
 from follower import PathFollower
 from vehicle import VehicleSpec, TrailerSpec, Vehicle, KinematicModel
-from world import World, Pos
+from world import World, Pos, ROUTE_COLOR, EXPLORED_ROUTE_COLOR
 from world import (
     PARKING_LOT_1,
     PARKING_LOT_2,
@@ -90,20 +90,30 @@ TRUCK = VehicleSpec(
 
 """MODIFY THIS TO SET UP THE SIMULATION"""
 # vehicle = Vehicle(ROBOT)
-# vehicle = Vehicle(CAR)
-vehicle = Vehicle(TRUCK)
+vehicle = Vehicle(CAR)
+# vehicle = Vehicle(TRUCK)
 
+# Worlds for the ROBOT
 # world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
-# world = World(PARKING_LOT_3)
+
+# Worlds for the CAR
+world = World(PARKING_LOT_3)
 # world = World(PARKING_LOT_4)
+
+# Worlds for the TRUCK
 # world = World(PARKING_LOT_5)
-world = World(PARKING_LOT_6)
+# world = World(PARKING_LOT_6)
+
+# Empty parking lots
 # world = World(EMPTY_PARKING_LOT)
 # world = World(EMPTY_PARKING_LOT_FOR_TRAILER)
 
 RENDER_OVERLAY = True
 # RENDER_OVERLAY = False
+
+# RENDER_EXPLORED_ROUTES = True
+RENDER_EXPLORED_ROUTES = False
 """"""
 
 collision = CollisionChecker(world, vehicle.spec)
@@ -126,9 +136,9 @@ world.render_hud(message="Planning route, please wait...")
 pygame.display.flip()
 pygame.event.pump()
 
-route = plan(vehicle.spec, collision)
+route, explored_segments = plan(vehicle.spec, collision)
 
-if route is None:
+if route is None or len(route) == 0:
     print("NO PATH FOUND!")
     route = [vehicle.spec.origin]
 
@@ -174,6 +184,15 @@ while running:
     vehicle.render(world, pos=vehicle.spec.destination)
     vehicle.render_parking_zone(world)
 
+    if RENDER_EXPLORED_ROUTES:
+        for segment in explored_segments:
+            world.render_route(segment, EXPLORED_ROUTE_COLOR)
+        world.render_route(route, ROUTE_COLOR)
+        vehicle.render(world)
+        world.render_hud(message=f"Explored {len(explored_segments)} segments")
+        pygame.display.flip()
+        continue
+
     if RENDER_OVERLAY:
         collision.render_loose_overlay()
         collision.render_boundary_overlay()
@@ -198,5 +217,3 @@ while running:
 
     pygame.display.flip()
     world.clock.tick(60)
-
-# pygame.quit()
