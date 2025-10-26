@@ -90,20 +90,20 @@ TRUCK = VehicleSpec(
 
 """MODIFY THIS TO SET UP THE SIMULATION"""
 # vehicle = Vehicle(ROBOT)
-vehicle = Vehicle(CAR)
-# vehicle = Vehicle(TRUCK)
+# vehicle = Vehicle(CAR)
+vehicle = Vehicle(TRUCK)
 
 # Worlds for the ROBOT
 # world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
 
 # Worlds for the CAR
-world = World(PARKING_LOT_3)
+# world = World(PARKING_LOT_3)
 # world = World(PARKING_LOT_4)
 
 # Worlds for the TRUCK
 # world = World(PARKING_LOT_5)
-# world = World(PARKING_LOT_6)
+world = World(PARKING_LOT_6)
 
 # Empty parking lots
 # world = World(EMPTY_PARKING_LOT)
@@ -112,8 +112,8 @@ world = World(PARKING_LOT_3)
 RENDER_OVERLAY = True
 # RENDER_OVERLAY = False
 
-# RENDER_EXPLORED_ROUTES = True
-RENDER_EXPLORED_ROUTES = False
+RENDER_EXPLORED_ROUTES = True
+# RENDER_EXPLORED_ROUTES = False
 """"""
 
 collision = CollisionChecker(world, vehicle.spec)

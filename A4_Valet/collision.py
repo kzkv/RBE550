@@ -195,23 +195,6 @@ class CollisionChecker:
             if self.obstacles[row, col]:
                 return True  # Corner in an obstacle cell
 
-        # Check edges by sampling points between corners
-        num_samples = 3  # Sample points per edge
-        for i in range(4):
-            c1 = corners[i]
-            c2 = corners[(i + 1) % 4]
-
-            for j in range(1, num_samples):
-                t = j / num_samples
-                ex = c1[0] + t * (c2[0] - c1[0])
-                ey = c1[1] + t * (c2[1] - c1[1])
-
-                row, col = world_to_grid(ex, ey)
-                if row < 0 or row >= self.world.grid_dimensions or col < 0 or col >= self.world.grid_dimensions:
-                    return True
-                if self.obstacles[row, col]:
-                    return True
-
         return False
 
     def is_path_collision_free(self, path_points: List[Pos]) -> bool:
