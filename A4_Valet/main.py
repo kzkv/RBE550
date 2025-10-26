@@ -90,20 +90,20 @@ TRUCK = VehicleSpec(
 
 """MODIFY THIS TO SET UP THE SIMULATION"""
 # vehicle = Vehicle(ROBOT)
-# vehicle = Vehicle(CAR)
-vehicle = Vehicle(TRUCK)
+vehicle = Vehicle(CAR)
+# vehicle = Vehicle(TRUCK)
 
 # Worlds for the ROBOT
 # world = World(PARKING_LOT_1)
 # world = World(PARKING_LOT_2)
 
 # Worlds for the CAR
-# world = World(PARKING_LOT_3)
+world = World(PARKING_LOT_3)
 # world = World(PARKING_LOT_4)
 
 # Worlds for the TRUCK
 # world = World(PARKING_LOT_5)
-world = World(PARKING_LOT_6)
+# world = World(PARKING_LOT_6)
 
 # Empty parking lots
 # world = World(EMPTY_PARKING_LOT)
@@ -112,9 +112,26 @@ world = World(PARKING_LOT_6)
 RENDER_OVERLAY = True
 # RENDER_OVERLAY = False
 
-RENDER_EXPLORED_ROUTES = True
-# RENDER_EXPLORED_ROUTES = False
+# RENDER_EXPLORED_ROUTES = True
+RENDER_EXPLORED_ROUTES = False
 """"""
+
+# Wait for key press before starting
+# waiting_for_key = True
+# while waiting_for_key:
+#     for e in pygame.event.get():
+#         if e.type == pygame.QUIT:
+#             pygame.quit()
+#             exit()
+#         if e.type == pygame.KEYDOWN and e.key == pygame.K_SPACE:
+#             waiting_for_key = False
+#             break
+#
+#     world.clear()
+#     world.render_grid()
+#     world.render_hud(message="Press SPACE to start simulation")
+#     pygame.display.flip()
+#     world.clock.tick(60)
 
 collision = CollisionChecker(world, vehicle.spec)
 
