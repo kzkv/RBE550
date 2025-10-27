@@ -15,8 +15,10 @@ pygame.display.set_caption("Wildfire")
 
 # SEED = 67
 SEED = 41
+TIME_SPEED = 100.0  # Time speed coefficient (1.0 = real time, 2.0 = 2x speed, etc.)
+PAR_TIME = 3600.0
 
-world = World(SEED)
+world = World(SEED, time_speed=TIME_SPEED)
 
 runnig = True
 while runnig:
@@ -30,6 +32,12 @@ while runnig:
             row, col = world.world_to_grid(x, y)
             world.field.ignite(row, col)
 
+    if world.world_time >= PAR_TIME:
+        # TODO: consider what parts of the rendering should be done here
+        world.render_hud(message="Time's up!")
+        continue
+
+    world.update()
     world.clear()
     world.render_field()
     world.render_hud(message="HUD message")

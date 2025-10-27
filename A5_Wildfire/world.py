@@ -16,12 +16,6 @@ CELL_SIZE = 5.0  # 5 meters per cell
 PIXELS_PER_METER = 7
 OBSTACLE_DENSITY = 0.1
 
-CELL_BG_COLOR = (255, 255, 255)
-CELL_GRID_COLOR = (230, 230, 230)
-OBSTACLE_BG_COLOR = (100, 100, 100)
-HUD_BG_COLOR = (0, 0, 0)
-HUD_FONT_COLOR = (200, 200, 200)
-
 
 @dataclass(frozen=True)
 class Pos:
@@ -143,7 +137,7 @@ class Field:
 class World:
     """World state and rendering"""
 
-    def __init__(self, seed):
+    def __init__(self, seed, time_speed: float):
         self.grid_dimensions = GRID_DIMENSIONS
         self.cell_size = CELL_SIZE
         self.pixels_per_meter = PIXELS_PER_METER
@@ -153,10 +147,13 @@ class World:
         self.hud_padding = 10
         self.hud_height = self.font.get_height() + self.hud_padding * 2
 
+        self.clock = pygame.time.Clock()
+        self.time_speed = time_speed
+        self.world_time = 0.0  # World time in seconds
+
         self.field = Field(seed, self.grid_dimensions, OBSTACLE_DENSITY)
 
         self.screen = pygame.display.set_mode((self.field_dimensions, self.field_dimensions + self.hud_height))
-        self.clock = pygame.time.Clock()
 
     def grid_to_world(self, row: int, col: int) -> tuple[float, float]:
         """Returns the (x, y) center of the cell in meters from the upper left corner at the given (row, col)"""
@@ -176,9 +173,12 @@ class World:
 
     # Rendering
     def clear(self):
+        CELL_BG_COLOR = (255, 255, 255)
         self.screen.fill(CELL_BG_COLOR)
 
     def render_grid(self):
+        CELL_GRID_COLOR = (230, 230, 230)
+
         s = self.cell_dimensions
         for y in range(self.grid_dimensions):
             for x in range(self.grid_dimensions):
@@ -198,8 +198,14 @@ class World:
                     r = pygame.Rect(col * d, row * d, d, d)
                     pygame.draw.rect(self.screen, self.field.get_color(cell), r)
 
+    def update(self):
+        """Update world state with delta time adjusted for the multiplier"""
+        dt = self.clock.tick(60) / 1000.0
+        self.world_time += dt * self.time_speed
+
     def render_hud(self, wumpus_pos: Pos = None, firetruck_pos: Pos = None, message: str = ""):
-        text = message
+        HUD_BG_COLOR = (0, 0, 0)
+        HUD_FONT_COLOR = (200, 200, 200)
 
         mx, my = pygame.mouse.get_pos()
         x, y = self.pixel_to_world(mx, my)
@@ -209,19 +215,13 @@ class World:
         hud_rect = pygame.Rect(0, self.field_dimensions, self.field_dimensions, self.hud_height)
         pygame.draw.rect(self.screen, HUD_BG_COLOR, hud_rect)
 
-        # if vehicle_location:
-        #     cursor_location_string = f"{x:04.1f}, {y:04.1f} (row/col {row:02d}, {col:02d})"
-        #     vehicle_location_string = f"{vehicle_location.x:04.1f}, {vehicle_location.y:04.1f}"
-        #
-        #     xy_error = vehicle_location.distance_to(destination)
-        #     heading_error = vehicle_location.heading_error_to(destination)
-        #     error_string = f"   Errors: XY {xy_error:.2f}m, heading {math.degrees(heading_error):.1f}°"
-        #
-        #     text = f"Cursor: {cursor_location_string}   Vehicle: {vehicle_location_string}{error_string}   {message}"
+        # Format world time
+        time_str = f"{self.world_time:4.0f}s"
+        text = f"{time_str}    {message}"
 
         img = self.font.render(text, True, HUD_FONT_COLOR)
 
-        if in_bounds:  # Assumes the cursor is always within bounds
+        if in_bounds:
             self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
 
     def render_route(self, route: List[Pos], color: Tuple[int, int, int]):
