@@ -73,9 +73,9 @@ class Field:
     def get_color(self, cell: Cell) -> Tuple[int, int, int]:
         colors = {
             Cell.EMPTY: (255, 255, 255),
-            Cell.OBSTACLE: (100, 100, 100),
-            Cell.BURNING: (255, 100, 0),
-            Cell.BURNED: (50, 50, 50)
+            Cell.OBSTACLE: (50, 50, 50),
+            Cell.BURNING: (255, 75, 0),
+            Cell.BURNED: (150, 150, 150)
         }
         return colors.get(cell)
 
@@ -153,7 +153,7 @@ class World:
 
         self.field = Field(seed, self.grid_dimensions, OBSTACLE_DENSITY)
 
-        self.screen = pygame.display.set_mode((self.field_dimensions, self.field_dimensions + self.hud_height))
+        self.display = pygame.display.set_mode((self.field_dimensions, self.field_dimensions + self.hud_height))
 
     def grid_to_world(self, row: int, col: int) -> tuple[float, float]:
         """Returns the (x, y) center of the cell in meters from the upper left corner at the given (row, col)"""
@@ -174,7 +174,7 @@ class World:
     # Rendering
     def clear(self):
         CELL_BG_COLOR = (255, 255, 255)
-        self.screen.fill(CELL_BG_COLOR)
+        self.display.fill(CELL_BG_COLOR)
 
     def render_grid(self):
         CELL_GRID_COLOR = (230, 230, 230)
@@ -183,7 +183,7 @@ class World:
         for y in range(self.grid_dimensions):
             for x in range(self.grid_dimensions):
                 pygame.draw.rect(
-                    self.screen,
+                    self.display,
                     CELL_GRID_COLOR,
                     pygame.Rect(x * s, y * s, s, s),
                     width=1,
@@ -196,7 +196,7 @@ class World:
                 cell = self.field.get_cell(row, col)
                 if cell:
                     r = pygame.Rect(col * d, row * d, d, d)
-                    pygame.draw.rect(self.screen, self.field.get_color(cell), r)
+                    pygame.draw.rect(self.display, self.field.get_color(cell), r)
 
     def update(self):
         """Update world state with delta time adjusted for the multiplier"""
@@ -213,7 +213,7 @@ class World:
 
         in_bounds = (0 <= row < self.grid_dimensions and 0 <= col < self.grid_dimensions)
         hud_rect = pygame.Rect(0, self.field_dimensions, self.field_dimensions, self.hud_height)
-        pygame.draw.rect(self.screen, HUD_BG_COLOR, hud_rect)
+        pygame.draw.rect(self.display, HUD_BG_COLOR, hud_rect)
 
         # Format world time
         time_str = f"{self.world_time:4.0f}s"
@@ -222,10 +222,10 @@ class World:
         img = self.font.render(text, True, HUD_FONT_COLOR)
 
         if in_bounds:
-            self.screen.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
+            self.display.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
 
     def render_route(self, route: List[Pos], color: Tuple[int, int, int]):
         if len(route) < 2:
             return  # Need at least 2 points to draw a line
         pts = [(int(pos.x * self.pixels_per_meter), int(pos.y * self.pixels_per_meter)) for pos in route]
-        pygame.draw.lines(self.screen, color, False, pts, 2)
+        pygame.draw.lines(self.display, color, False, pts, 2)

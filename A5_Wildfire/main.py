@@ -6,6 +6,7 @@
 import numpy as np
 import pygame
 
+from wumpus import Wumpus
 from world import World, Cell, Pos
 
 rng = np.random.default_rng()
@@ -19,6 +20,7 @@ TIME_SPEED = 100.0  # Time speed coefficient (1.0 = real time, 2.0 = 2x speed, e
 PAR_TIME = 3600.0
 
 world = World(SEED, time_speed=TIME_SPEED)
+wumpus = Wumpus(world)
 
 runnig = True
 while runnig:
@@ -41,5 +43,8 @@ while runnig:
     world.clear()
     world.render_field()
     world.render_hud(message="HUD message")
+
+    # wumpus.render(41,35)
+    wumpus.render(41,35)
 
     pygame.display.flip()
