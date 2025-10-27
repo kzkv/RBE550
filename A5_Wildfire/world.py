@@ -59,6 +59,7 @@ class Field:
 
     def __init__(self, seed, grid_dimensions, obstacle_density):
         self.rng = np.random.default_rng(seed)
+        self.grid_dimensions = grid_dimensions
 
         # Tetromino shapes
         self.canonical_shapes = (
@@ -84,11 +85,27 @@ class Field:
         }
         return colors.get(cell)
 
+    def in_bounds(self, row: int, col: int) -> bool:
+        """Check if the given row and column are within the field bounds"""
+        return 0 <= row < self.grid_dimensions and 0 <= col < self.grid_dimensions
+
     def get_cell(self, row: int, col: int) -> Cell:
         return Cell(self.field[row, col])
 
     def set_cell(self, row: int, col: int, cell: Cell):
+        """A generic setter for cell state"""
+        if not self.in_bounds(row, col):
+            return
         self.field[row, col] = cell
+
+    def ignite(self, row: int, col: int) -> bool:
+        """Set a cell on fire if it's an obstacle."""
+        if not self.in_bounds(row, col):
+            return False
+        if self.get_cell(row, col) == Cell.OBSTACLE:
+            self.set_cell(row, col, Cell.BURNING)
+            return True
+        return False  # TODO: refactor to remove the return feedback if not needed
 
     # Generate obstacles field
     def _generate_obstacles(self, grid_dimensions: int, obstacle_density: float) -> np.ndarray:

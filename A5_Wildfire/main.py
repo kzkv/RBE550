@@ -24,8 +24,11 @@ while runnig:
         if event.type == pygame.QUIT:
             runnig = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            # TODO: set a cell under cursor on fire
-            pass
+            # Ignite on mouse click
+            mx, my = pygame.mouse.get_pos()
+            x, y = world.pixel_to_world(mx, my)
+            row, col = world.world_to_grid(x, y)
+            world.field.ignite(row, col)
 
     world.clear()
     world.render_field()
