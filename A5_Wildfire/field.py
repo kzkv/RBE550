@@ -167,20 +167,20 @@ class Field:
         for row, col in cells_to_ignite:
             self.ignite(row, col)
 
-    def get_cell_neighbors(self, row, col) -> list[tuple[int, int]]:
+    def get_cell_neighbors(self, location: tuple[int, int]) -> list[tuple[int, int]]:
         """Get up to 8 neighbors of a cell (fewer if on the edge)"""
+        row, col = location
         neighbor_offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
         return [(row + dr, col + dc) for dr, dc in neighbor_offsets if self.in_bounds(row + dr, col + dc)]
 
-    def has_all_empty_neighbors(self, row, col):
+    def has_all_empty_neighbors(self, location: tuple[int, int]):
         """Check if all in-bounds neighbors are empty"""
-        cell_neighbors = self.get_cell_neighbors(row, col)
+        cell_neighbors = self.get_cell_neighbors(location)
         return all(self.cells[n_row][n_col] == 0 for n_row, n_col in cell_neighbors)
 
-    def ignite_neighbors(self, row, col) -> int:
+    def ignite_neighbors(self, location: tuple[int, int]) -> int:
         """Ignite all obstacle neighbors of a cell"""
-        ignited = sum(self.ignite(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(row, col))
-        logger.info(f"Ignited {ignited} neighbors of cell ({row}, {col})")
+        ignited = sum(self.ignite(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(location))
         return ignited
 
     def tally_cells(self):
