@@ -16,7 +16,7 @@ pygame.display.set_caption("Wildfire")
 
 # SEED = 67
 SEED = 41
-TIME_SPEED = 100.0  # Time speed coefficient (1.0 = real time, 2.0 = 2x speed, etc.)
+TIME_SPEED = 5.0  # Time speed coefficient (1.0 = real time, 2.0 = 2x speed, etc.)
 PAR_TIME = 3600.0
 
 world = World(SEED, time_speed=TIME_SPEED)
@@ -40,8 +40,10 @@ while runnig:
         continue
 
     world.update()
+    world.field.update_burning_cells()
     world.clear()
     world.render_field()
+    world.render_spread()
     world.render_hud(message="HUD message")
 
     # wumpus.render(41,35)
