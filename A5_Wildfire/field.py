@@ -5,6 +5,9 @@ from enum import IntEnum
 from typing import Tuple, TYPE_CHECKING
 
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from world import World
@@ -164,18 +167,24 @@ class Field:
         for row, col in cells_to_ignite:
             self.ignite(row, col)
 
-    def has_all_empty_neighbors(self, row, col):
-        """Check if all 8 neighbors of a cell are empty. Edge cells are disqualified."""
+    def get_cell_neighbors(self, row, col) -> list[tuple[int, int]]:
+        """Get up to 8 neighbors of a cell (fewer if on the edge)"""
         neighbor_offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        return [(row + dr, col + dc) for dr, dc in neighbor_offsets if self.in_bounds(row + dr, col + dc)]
 
-        for dr, dc in neighbor_offsets:
-            neighbor_row = row + dr
-            neighbor_col = col + dc
+    def has_all_empty_neighbors(self, row, col):
+        """Check if all in-bounds neighbors are empty"""
+        cell_neighbors = self.get_cell_neighbors(row, col)
+        return all(self.cells[n_row][n_col] == 0 for n_row, n_col in cell_neighbors)
 
-            if not self.in_bounds(neighbor_row, neighbor_col):
-                return False  # the cell is on the edge
+    def ignite_neighbors(self, row, col) -> int:
+        """Ignite all obstacle neighbors of a cell"""
+        ignited = sum(self.ignite(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(row, col))
+        logger.info(f"Ignited {ignited} neighbors of cell ({row}, {col})")
+        return ignited
 
-            if self.cells[neighbor_row][neighbor_col] != 0:
-                return False
-
-        return True
+    def tally_cells(self):
+        # Count cells by status; exclude empty, always include other statuses counts (even if not present)
+        tally = {cell: 0 for cell in Cell.__members__.values() if cell != Cell.EMPTY}
+        tally.update({Cell(s): int(c) for s, c in zip(*np.unique(self.cells, return_counts=True)) if s != Cell.EMPTY})
+        return tally

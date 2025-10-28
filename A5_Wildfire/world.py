@@ -135,7 +135,11 @@ class World:
 
         # Format world time
         time_str = f"{self.world_time:4.0f}s"
-        text = f"{time_str}    {message}"
+
+        # Cell states tally
+        tally_str = "  ".join(f"{cell.name}: {count:<3d}" for cell, count in self.field.tally_cells().items())
+
+        text = f"{time_str}    {tally_str}    {message}"
 
         img = self.font.render(text, True, HUD_FONT_COLOR)
         self.display.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))

@@ -5,6 +5,7 @@ from typing import Optional
 
 import pygame
 from world import World
+from field import Cell
 
 
 class Wumpus:
@@ -44,6 +45,19 @@ class Wumpus:
         # Choose a random valid cell
         self.row, self.col = self.world.field.rng.choice(valid_cells)
         return self.row, self.col
+
+    def set_position(self, row: int, col: int):
+        """Set the Wumpus's position"""
+        if not self.world.field.in_bounds(row, col):
+            return
+
+        if self.world.field.get_cell(row, col) == Cell.EMPTY:
+            self.row = row
+            self.col = col
+
+    def update(self):
+        # Set neighbors on fire
+        self.world.field.ignite_neighbors(self.row, self.col)
 
     def render(self):
         """Render the wumpus at its current position"""
