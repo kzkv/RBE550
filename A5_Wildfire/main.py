@@ -2,12 +2,30 @@
 # RBE 550, Assignment 5, Wildfire
 # See Gen AI usage approach write-up in the report
 
+# TODO: put off fires near the truck
+
+# TODO: calculate cell priority for Wumpus,
+#  add by number of unaffected cells in the radius,
+#  penalty for already burning in the radius,
+#  penalty for proximity to the truck,
+#  penalty for distance of the planned route (in cells)
+
+# TODO: visualize cell priority; validate with manually moving the truck
+
+# TODO: make Wumpus move to the highest priority cell
+# TODO: move the truck to see how Wumpus alters the plan
+
+
 import logging
+import math
+
 import numpy as np
 import pygame
 
 from wumpus import Wumpus
+from firetruck import Firetruck
 from world import World
+from field import Cell
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -19,13 +37,17 @@ pygame.display.set_caption("Wildfire")
 
 # SEED = 67
 SEED = 41
-TIME_SPEED = 10.0  # Time speed coefficient (1.0 = real time, 2.0 = 2x speed, etc.)
+TIME_SPEED = 10.0  # Time speed coefficient
 PAR_TIME = 3600.0
+
 WUMPUS_ROWS = (0, 10)
 WUMPUS_COLS = (0, 10)
+FIRETRUCK_ROWS = (40, 49)
+FIRETRUCK_COLS = (40, 49)
 
 world = World(SEED, time_speed=TIME_SPEED)
 wumpus = Wumpus(world, WUMPUS_ROWS, WUMPUS_COLS)
+firetruck = Firetruck(world, FIRETRUCK_ROWS, FIRETRUCK_COLS)
 
 running = True
 while running:
@@ -38,7 +60,11 @@ while running:
             x, y = world.pixel_to_world(mx, my)
             row, col = world.world_to_grid(x, y)
 
-            wumpus.set_goal(row, col)
+            if world.field.get_cell(row, col) == Cell.OBSTACLE:
+                world.field.ignite(row, col)
+            elif world.field.get_cell(row, col) == Cell.EMPTY:
+                heading = -math.pi / 2
+                firetruck.set_pose(firetruck.grid_to_pose((row, col), heading))
 
     if world.world_time >= PAR_TIME:
         # TODO: consider what parts of the rendering should be done here
@@ -55,5 +81,8 @@ while running:
     wumpus.update()
     wumpus.render_path()
     wumpus.render()
+
+    firetruck.update()
+    firetruck.render()
 
     pygame.display.flip()

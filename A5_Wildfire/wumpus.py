@@ -1,5 +1,6 @@
 # Tom Kazakov
 # RBE 550, Assignment 5, Wildfire
+
 import logging
 
 import networkx as nx
@@ -18,40 +19,13 @@ class Wumpus:
 
     def __init__(self, world: 'World', preset_rows: tuple[int, int], preset_cols: tuple[int, int]):
         self.world = world
-        self.location = None  # (row, col) current position
+        self.location = self.world.field.initialize_position(preset_rows, preset_cols)
         self.goal = None  # (row, col) goal position
         self.path = []
 
         # Load and scale the wumpus image
         self.image = pygame.image.load('assets/wumpus.png').convert_alpha()
         self.image = pygame.transform.scale(self.image, (world.cell_dimensions, world.cell_dimensions))
-
-        self._initialize_position(preset_rows, preset_cols)
-
-    def _initialize_position(self, preset_rows, preset_cols) -> tuple | None:
-        """
-        Initialize wumpus in a random cell within the preset area where all 8 neighbors are empty.
-        Args: ranges of rows and columns of the preset area
-        Returns tuple (row, col) if a valid position is found, None otherwise
-        """
-        min_row, max_row = preset_rows
-        min_col, max_col = preset_cols
-
-        # Find all valid cells in the preset area
-        valid_cells = []
-
-        for row in range(min_row, max_row + 1):
-            for col in range(min_col, max_col + 1):
-                if self.world.field.has_all_empty_neighbors((row, col)):
-                    valid_cells.append((row, col))
-
-        if not valid_cells:
-            return None
-
-        # Choose a random valid cell
-        chosen_location = self.world.field.rng.choice(valid_cells)
-        self.location = tuple(chosen_location)
-        return self.location
 
     def _graph_from_field(self) -> nx.Graph:
         """Build a graph from the field, removing impassable cells"""
@@ -118,11 +92,11 @@ class Wumpus:
 
     def render_path(self):
         """Render the planned path"""
-        if len(self.path) < 2:
-            return
-
         PATH_COLOR = (200, 200, 200)
         GOAL_COLOR = (162, 32, 174)  # Wumpus color
+
+        if len(self.path) < 2:
+            return
 
         # Draw path lines
         cell_dim = self.world.cell_dimensions

@@ -117,6 +117,30 @@ class Field:
 
         return field
 
+    def initialize_position(self, preset_rows, preset_cols) -> tuple | None:
+        """
+        Initialize wumpus or truck in a random cell within the preset area where all 8 neighbors are empty.
+        Args: ranges of rows and columns of the preset area
+        Returns tuple (row, col) if a valid position is found, None otherwise
+        """
+        min_row, max_row = preset_rows
+        min_col, max_col = preset_cols
+
+        # Find all valid cells in the preset area
+        valid_cells = []
+
+        for row in range(min_row, max_row + 1):
+            for col in range(min_col, max_col + 1):
+                if self.world.field.has_all_empty_neighbors((row, col)):
+                    valid_cells.append((row, col))
+
+        if not valid_cells:
+            return None
+
+        # Choose a random valid cell
+        chosen_location = self.world.field.rng.choice(valid_cells)
+        return tuple(chosen_location)
+
     def update_burning_cells(self):
         """Update burning cells and spread fire after burn duration."""
         cells_to_burnout = []

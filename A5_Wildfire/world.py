@@ -1,42 +1,20 @@
 # Tom Kazakov
 # RBE 550, Assignment 5, Wildfire
 
+import math
 from dataclasses import dataclass
-from typing import Tuple, List
-from field import Field, Cell
+from typing import Tuple
 
 import numpy as np
 import pygame
-import math
+
+from field import Field, Cell
 
 # Fundamental world constants
 GRID_DIMENSIONS = 50
 CELL_SIZE = 5.0  # 5 meters per cell
 PIXELS_PER_METER = 7
 OBSTACLE_DENSITY = 0.1
-
-
-@dataclass(frozen=True)
-class Pos:
-    """Position in the world: x, y, heading"""
-    x: float  # m
-    y: float  # m
-    heading: float  # rad, 0 is along the x-axis, CCW is positive
-
-    def distance_to(self, other: 'Pos') -> float:
-        """Euclidean distance to another position"""
-        return math.hypot(self.x - other.x, self.y - other.y)
-
-    def heading_error_to(self, other: 'Pos') -> float:
-        """Heading error to another position (wrapped to [-pi, pi])"""
-        error = abs(self.heading - other.heading)
-        if error > math.pi:
-            error = 2 * math.pi - error
-        return error
-
-    def to_xy_tuple(self) -> Tuple[float, float]:
-        """Convert to (x, y) tuple for rendering"""
-        return self.x, self.y
 
 
 class World:
@@ -144,8 +122,25 @@ class World:
         img = self.font.render(text, True, HUD_FONT_COLOR)
         self.display.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
 
-    def render_route(self, route: List[Pos], color: Tuple[int, int, int]):
-        if len(route) < 2:
-            return  # Need at least 2 points to draw a line
-        pts = [(int(pos.x * self.pixels_per_meter), int(pos.y * self.pixels_per_meter)) for pos in route]
-        pygame.draw.lines(self.display, color, False, pts, 2)
+
+@dataclass(frozen=True)
+class Pos:
+    """Position in the world: x, y, heading"""
+    x: float  # m
+    y: float  # m
+    heading: float  # rad, 0 is along the x-axis, CCW is positive
+
+    def distance_to(self, other: 'Pos') -> float:
+        """Euclidean distance to another position"""
+        return math.hypot(self.x - other.x, self.y - other.y)
+
+    def heading_error_to(self, other: 'Pos') -> float:
+        """Heading error to another position (wrapped to [-pi, pi])"""
+        error = abs(self.heading - other.heading)
+        if error > math.pi:
+            error = 2 * math.pi - error
+        return error
+
+    def to_xy_tuple(self) -> Tuple[float, float]:
+        """Convert to (x, y) tuple for rendering"""
+        return self.x, self.y
