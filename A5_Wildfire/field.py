@@ -162,11 +162,11 @@ class Field:
 
         return field
 
-    def initialize_position(self, preset_rows, preset_cols) -> tuple | None:
+    def initialize_location(self, preset_rows, preset_cols) -> tuple | None:
         """
         Initialize wumpus or truck in a random cell within the preset area where all 8 neighbors are empty.
         Args: ranges of rows and columns of the preset area
-        Returns tuple (row, col) if a valid position is found, None otherwise
+        Returns tuple (row, col) if a valid location is found, None otherwise
         """
         min_row, max_row = preset_rows
         min_col, max_col = preset_cols
@@ -245,6 +245,12 @@ class Field:
         """Ignite all obstacle neighbors of a cell"""
         ignited = sum(self.ignite(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(location))
         return ignited
+
+    def ignite_random_neighbor(self, location: tuple[int, int]) -> bool:
+        """Ignite a random obstacle neighbor of a cell"""
+        neighbors = self.get_cell_neighbors(location)
+        obstacle_neighbors = [(row, col) for row, col in neighbors if self.get_cell(row, col) == Cell.OBSTACLE]
+        return self.ignite(*self.rng.choice(obstacle_neighbors)) if obstacle_neighbors else False
 
     def suppress_neighbors(self, location: tuple[int, int]) -> int:
         suppressed = sum(self.suppress(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(location))

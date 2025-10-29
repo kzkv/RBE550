@@ -60,8 +60,10 @@ while running:
             if world.field.get_cell(row, col) == Cell.OBSTACLE:
                 world.field.ignite(row, col)
             elif world.field.get_cell(row, col) == Cell.EMPTY:
-                heading = -math.pi / 2
-                firetruck.set_pose(firetruck.grid_to_pose((row, col), heading))
+                # heading = -math.pi / 2
+                # firetruck.set_pose(firetruck.grid_to_pose((row, col), heading))
+                wumpus.set_goal(row, col)
+                wumpus.set_location(row, col)
 
     if world.world_time >= PAR_TIME:
         # TODO: consider what parts of the rendering should be done here

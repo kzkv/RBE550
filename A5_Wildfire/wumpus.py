@@ -51,6 +51,11 @@ Goal selection:
     1. Calculate priorities using Euclidean distance
     2. Compute actual A* path lengths for TOP_CANDIDATES_COUNT candidates
     3. Stop early if no improvement is found (adjusted with MIN_SCORE_IMPROVEMENT)
+    
+Conflagration rules: 
+    1. Ignites a random neighbor
+    2. Only ignites if at a goal cell
+    3. Can only ignite again after movement
 """
 
 
@@ -59,12 +64,15 @@ class Wumpus:
 
     def __init__(self, world: 'World', preset_rows: tuple[int, int], preset_cols: tuple[int, int]):
         self.world = world
-        self.location = self.world.field.initialize_position(preset_rows, preset_cols)
-        self.goal = None  # (row, col) goal position
+        self.location = self.world.field.initialize_location(preset_rows, preset_cols)
+        self.goal = None  # (row, col) goal location
         self.path = []
 
         # Cache cell priorities (invalidated when state changes)
         self._cached_priorities = None
+
+        # Flag if already done the deed at the location
+        self.has_ignited_at_location = False
 
         # Load and scale the wumpus image
         self.image = pygame.image.load('assets/wumpus.png').convert_alpha()
@@ -102,7 +110,7 @@ class Wumpus:
         Returns: 2D array of priority scores (same shape as grid)
         """
         from scipy.ndimage import binary_dilation
-        
+
         field = self.world.field
         priorities = np.full((field.grid_dimensions, field.grid_dimensions), -np.inf, dtype=float)
 
@@ -110,10 +118,10 @@ class Wumpus:
         obstacle_mask = (field.cells == Cell.OBSTACLE)  # Only unburned obstacles
         dilated_obstacles = binary_dilation(obstacle_mask, structure=np.ones((3, 3)))
         empty_cells = (field.cells == Cell.EMPTY)
-        
+
         # Valid targets: empty cells adjacent to unburned obstacles
         valid_targets = empty_cells & dilated_obstacles
-        
+
         # Exclude cells near the truck
         truck_row, truck_col = self.world.firetruck.get_location()
         row_indices, col_indices = np.meshgrid(
@@ -123,7 +131,7 @@ class Wumpus:
         )
         truck_distances = np.sqrt((row_indices - truck_row) ** 2 + (col_indices - truck_col) ** 2)
         truck_exclusion = truck_distances < TRUCK_EXCLUSION_RADIUS
-        
+
         # Remove truck-adjacent cells from valid targets
         valid_targets = valid_targets & ~truck_exclusion
 
@@ -211,13 +219,16 @@ class Wumpus:
 
         return best_cell
 
-    def set_position(self, row: int, col: int):
-        """Set the Wumpus's position"""
+    def set_location(self, row: int, col: int):
+        """Set the Wumpus's location"""
         if not self.world.field.in_bounds(row, col):
             return
 
         if self.world.field.get_cell(row, col) == Cell.EMPTY:
             self.location = (row, col)
+
+            # Reset ignition flag when location is set (even if it's the same location)
+            self.has_ignited_at_location = False  # Make sure we shouldn't check if the location hasn't changed instead
 
     def set_goal(self, row: int, col: int):
         """Set a goal and plan a path to it"""
@@ -231,6 +242,9 @@ class Wumpus:
 
         self.goal = (row, col)
         self.path = self.plan_path_to(self.goal)
+
+        # Reset ignition flag when a new goal is set
+        self.has_ignited_at_location = False  # TODO: make sure goal setting should reset the flag
 
     def set_goal_auto(self):
         """Automatically select and set the best goal"""
@@ -248,13 +262,15 @@ class Wumpus:
         # Update cache when state changes
         self._cached_priorities = self.calculate_cell_priorities()
 
-        # Set neighbors on fire
-        ignited = self.world.field.ignite_neighbors(self.location)
-        if ignited:
-            logger.info(f"Wumpus ignited {ignited} cells")
+        # Set a random neighbor on fire (only once per location and only if at a goal)
+        if not self.has_ignited_at_location and self.location == self.goal:
+            ignited = self.world.field.ignite_random_neighbor(self.location)
+            if ignited:
+                self.has_ignited_at_location = True
+                logger.info(f"Wumpus ignited a cell")
 
     def render(self):
-        """Render the wumpus at its current position"""
+        """Render the wumpus at its current location"""
         row, col = self.location
         x = col * self.world.cell_dimensions
         y = row * self.world.cell_dimensions

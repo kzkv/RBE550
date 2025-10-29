@@ -23,7 +23,7 @@ class Firetruck:
     def __init__(self, world: 'World', preset_rows: tuple[int, int], preset_cols: tuple[int, int]):
         self.world = world
 
-        initial_location = self.world.field.initialize_position(preset_rows, preset_cols)
+        initial_location = self.world.field.initialize_location(preset_rows, preset_cols)
         self.pos = self.grid_to_pose(initial_location, INITIAL_HEADING)
         self.location = initial_location
         self.location_arrival = 0.0  # Time at which the firetruck arrived at the location
@@ -36,7 +36,7 @@ class Firetruck:
         self.max_velocity = 10.0  # m/s
 
     def grid_to_pose(self, grid_pos: tuple[int, int], heading: float) -> Pos:
-        """Convert grid position from field.initialize_position() to a Pos with heading"""
+        """Convert grid location from field.initialize_location() to a Pos with heading"""
         row, col = grid_pos
         x, y = self.world.grid_to_world(row, col)
         return Pos(x=x, y=y, heading=heading)
