@@ -3,21 +3,13 @@
 # See Gen AI usage approach write-up in the report
 
 # TODO: Wumpus only ignites one cell
-# TODO: don't calculate the radius, dilate and use the mask instead to ignite
-
-# TODO: calculate cell priority for Wumpus,
-#  add by number of unaffected cells in the radius,
-#  penalty for already burning in the radius,
-#  penalty for proximity to the truck,
-#  penalty for distance of the planned route (in cells)
-
-# TODO: visualize cell priority; validate with manually moving the truck
 
 # TODO: make Wumpus move to the highest priority cell
 # TODO: move the truck to see how Wumpus alters the plan
 
 # TODO: scores for Wumpus and firetruck
 
+# TODO: motion-plan for firetruck
 
 import logging
 import math
@@ -84,6 +76,8 @@ while running:
     world.render_hud()
 
     wumpus.update()
+    wumpus.render_priority_heatmap()
+    wumpus.set_goal_auto()
     wumpus.render_path()
     wumpus.render()
 

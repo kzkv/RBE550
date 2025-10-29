@@ -69,8 +69,8 @@ class Field:
         self.world = world
 
         # Pre-computed spread mask
-        self._spread_radius_cells = int(np.ceil(SPREAD_RADIUS / self.world.cell_size))
-        self._spread_mask = self._precompute_spread_mask()
+        self.spread_radius_cells = int(np.ceil(SPREAD_RADIUS / self.world.cell_size))
+        self.spread_mask = self._precompute_spread_mask()
 
     def rotate(self, shape: np.ndarray):
         return np.rot90(shape, self.rng.choice([-1, 0, 1, 2]))
@@ -206,12 +206,12 @@ class Field:
 
         # Spread fires
         cells_to_ignite = []
-        radius = self._spread_radius_cells
+        radius = self.spread_radius_cells
         for row, col in cells_to_spread:
             r_slice = slice(max(0, row - radius), min(self.grid_dimensions, row + radius + 1))
             c_slice = slice(max(0, col - radius), min(self.grid_dimensions, col + radius + 1))
 
-            mask_slice = self._spread_mask[
+            mask_slice = self.spread_mask[
                 radius - (row - r_slice.start):radius + (r_slice.stop - row),
                 radius - (col - c_slice.start):radius + (c_slice.stop - col)
             ]
