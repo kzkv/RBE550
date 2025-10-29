@@ -12,6 +12,20 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from world import World
 
+SPREAD_DURATION = 10.0  # s, time to spread fire after ignition
+SPREAD_RADIUS = 30.0  # m
+BURNOUT_DURATION = 30.0  # s, time to burn out after ignition
+
+"""
+Fire propagation logic:
+- Fires ignite on OBSTACLE cells, transitioning them to BURNING state
+- Each burning cell spreads fire once after SPREAD_DURATION seconds 
+  to all OBSTACLE cells within SPREAD_RADIUS meters
+- Fires burn out after BURNOUT_DURATION seconds, transitioning to BURNED state
+- The 'has_spread' set tracks which fires have already propagated 
+  to prevent repeated spreading
+"""
+
 
 class Cell(IntEnum):
     """Cell states"""
@@ -50,8 +64,7 @@ class Field:
 
         # Track ignition times for burning cells
         self.ignition_times = {}  # (row, col) -> ignition_time
-        self.burn_duration = 10.0  # seconds
-        self.spread_radius = 30.0  # meters
+        self.has_spread = set()  # Set of (row, col) cells that have already spread fire
 
         self.world = world
 
@@ -77,13 +90,21 @@ class Field:
 
     def ignite(self, row: int, col: int) -> bool:
         """Set a cell on fire if it's an obstacle."""
-        if not self.in_bounds(row, col):
-            return False
         if self.get_cell(row, col) == Cell.OBSTACLE:
             self.set_cell(row, col, Cell.BURNING)
             self.ignition_times[(row, col)] = self.world.world_time
             return True
         return False  # TODO: refactor to remove the return feedback if not needed
+
+    def suppress(self, row: int, col: int) -> bool:
+        """Put out fire in a cell if it's burning."""
+        if self.get_cell(row, col) == Cell.BURNING:
+            self.set_cell(row, col, Cell.OBSTACLE)
+            if (row, col) in self.ignition_times:
+                del self.ignition_times[(row, col)]
+            self.has_spread.discard((row, col))
+            return True
+        return False
 
     # Generate obstacle field
     def _generate_obstacles(self, grid_dimensions: int, obstacle_density: float) -> np.ndarray:
@@ -142,54 +163,63 @@ class Field:
         return tuple(chosen_location)
 
     def update_burning_cells(self):
-        """Update burning cells and spread fire after burn duration."""
+        """Update burning cells and spread fire after spread duration."""
         cells_to_burnout = []
-        cells_to_ignite = []
+        cells_to_spread = []
 
         # Check each burning cell
         for (row, col), ignition_time in self.ignition_times.items():
             time_burning = self.world.world_time - ignition_time
 
-            if time_burning >= self.burn_duration:
-                # This cell has been burning for 10 seconds
+            # Check if this fire should spread (only once)
+            if time_burning >= SPREAD_DURATION and (row, col) not in self.has_spread:
+                cells_to_spread.append((row, col))
+                self.has_spread.add((row, col))
+
+            # Check if this fire should burn out
+            if time_burning >= BURNOUT_DURATION:
                 cells_to_burnout.append((row, col))
 
-                # Find all obstacles within a 30 m radius
-                cell_size = self.world.cell_size
-                center_x = (col + 0.5) * cell_size
-                center_y = (row + 0.5) * cell_size
+        # Spread fires
+        cells_to_ignite = []
+        for row, col in cells_to_spread:
+            # Find all obstacles within the specified radius
+            cell_size = self.world.cell_size
+            center_x = (col + 0.5) * cell_size
+            center_y = (row + 0.5) * cell_size
 
-                # Calculate radius in grid cells
-                radius_cells = int(np.ceil(self.spread_radius / cell_size))
+            # Calculate radius in grid cells
+            radius_cells = int(np.ceil(SPREAD_RADIUS / cell_size))
 
-                # Pre-calculate bounds
-                r_min = max(0, row - radius_cells)
-                r_max = min(self.grid_dimensions, row + radius_cells + 1)
-                c_min = max(0, col - radius_cells)
-                c_max = min(self.grid_dimensions, col + radius_cells + 1)
-                r_range = np.arange(r_min, r_max)
-                c_range = np.arange(c_min, c_max)
-                r_grid, c_grid = np.meshgrid(r_range, c_range, indexing='ij')
+            # Pre-calculate bounds
+            r_min = max(0, row - radius_cells)
+            r_max = min(self.grid_dimensions, row + radius_cells + 1)
+            c_min = max(0, col - radius_cells)
+            c_max = min(self.grid_dimensions, col + radius_cells + 1)
+            r_range = np.arange(r_min, r_max)
+            c_range = np.arange(c_min, c_max)
+            r_grid, c_grid = np.meshgrid(r_range, c_range, indexing='ij')
 
-                target_x = (c_grid + 0.5) * cell_size
-                target_y = (r_grid + 0.5) * cell_size
-                distances = np.sqrt((target_x - center_x) ** 2 + (target_y - center_y) ** 2)
+            target_x = (c_grid + 0.5) * cell_size
+            target_y = (r_grid + 0.5) * cell_size
+            distances = np.sqrt((target_x - center_x) ** 2 + (target_y - center_y) ** 2)
 
-                # Find cells within the radius that are obstacles
-                mask = (distances <= self.spread_radius) & (self.cells[r_min:r_max, c_min:c_max] == Cell.OBSTACLE)
-                burning_r, burning_c = np.where(mask)
+            # Find cells within the radius that are obstacles
+            mask = (distances <= SPREAD_RADIUS) & (self.cells[r_min:r_max, c_min:c_max] == Cell.OBSTACLE)
+            burning_r, burning_c = np.where(mask)
 
-                # Convert back to absolute coordinates
-                cells_to_ignite.extend(zip(burning_r + r_min, burning_c + c_min))
-
-        # Burn out cells that have been burning for 10 seconds
-        for row, col in cells_to_burnout:
-            self.set_cell(row, col, Cell.BURNED)
-            del self.ignition_times[(row, col)]
+            # Convert back to absolute coordinates
+            cells_to_ignite.extend(zip(burning_r + r_min, burning_c + c_min))
 
         # Ignite new cells
         for row, col in cells_to_ignite:
             self.ignite(row, col)
+
+        # Burn out cells that have been burning long enough
+        for row, col in cells_to_burnout:
+            self.set_cell(row, col, Cell.BURNED)
+            del self.ignition_times[(row, col)]
+            self.has_spread.discard((row, col))
 
     def get_cell_neighbors(self, location: tuple[int, int]) -> list[tuple[int, int]]:
         """Get up to 8 neighbors of a cell (fewer if on the edge)"""
@@ -206,6 +236,10 @@ class Field:
         """Ignite all obstacle neighbors of a cell"""
         ignited = sum(self.ignite(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(location))
         return ignited
+
+    def suppress_neighbors(self, location: tuple[int, int]) -> int:
+        suppressed = sum(self.suppress(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(location))
+        return suppressed
 
     def tally_cells(self):
         # Count cells by status; exclude empty, always include other statuses counts (even if not present)

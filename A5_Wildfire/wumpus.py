@@ -77,6 +77,9 @@ class Wumpus:
         # Plan path
         self.path = self.plan_path_to(self.goal)
 
+    def get_location(self) -> tuple[int, int]:
+        return int(self.location[0]), int(self.location[1])
+
     def update(self):
         # Set neighbors on fire
         ignited = self.world.field.ignite_neighbors(self.location)

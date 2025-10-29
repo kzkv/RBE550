@@ -2,7 +2,8 @@
 # RBE 550, Assignment 5, Wildfire
 # See Gen AI usage approach write-up in the report
 
-# TODO: put off fires near the truck
+# TODO: Wumpus only ignites one cell
+# TODO: don't calculate the radius, dilate and use the mask instead to ignite
 
 # TODO: calculate cell priority for Wumpus,
 #  add by number of unaffected cells in the radius,
@@ -14,6 +15,8 @@
 
 # TODO: make Wumpus move to the highest priority cell
 # TODO: move the truck to see how Wumpus alters the plan
+
+# TODO: scores for Wumpus and firetruck
 
 
 import logging
@@ -37,7 +40,7 @@ pygame.display.set_caption("Wildfire")
 
 # SEED = 67
 SEED = 41
-TIME_SPEED = 10.0  # Time speed coefficient
+TIME_SPEED = 2.0  # Time speed coefficient
 PAR_TIME = 3600.0
 
 WUMPUS_ROWS = (0, 10)
@@ -48,6 +51,8 @@ FIRETRUCK_COLS = (40, 49)
 world = World(SEED, time_speed=TIME_SPEED)
 wumpus = Wumpus(world, WUMPUS_ROWS, WUMPUS_COLS)
 firetruck = Firetruck(world, FIRETRUCK_ROWS, FIRETRUCK_COLS)
+world.wumpus = wumpus
+world.firetruck = firetruck
 
 running = True
 while running:
@@ -76,7 +81,7 @@ while running:
     world.clear()
     world.render_field()
     world.render_spread()
-    world.render_hud(message="HUD message")
+    world.render_hud()
 
     wumpus.update()
     wumpus.render_path()

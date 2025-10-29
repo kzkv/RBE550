@@ -3,12 +3,16 @@
 
 import math
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from wumpus import Wumpus
+    from firetruck import Firetruck
 
 import numpy as np
 import pygame
 
-from field import Field, Cell
+from field import Field, Cell, SPREAD_RADIUS
 
 # Fundamental world constants
 GRID_DIMENSIONS = 50
@@ -35,6 +39,8 @@ class World:
         self.world_time = 0.0  # World time in seconds
 
         self.field = Field(seed, self.grid_dimensions, OBSTACLE_DENSITY, world=self)
+        self.wumpus = None
+        self.firetruck = None
 
         self.display = pygame.display.set_mode((self.field_dimensions, self.field_dimensions + self.hud_height))
 
@@ -58,6 +64,12 @@ class World:
         """Return a list of (row, col) coordinates for all cells matching the given type."""
         rows, cols = np.where(self.field.cells == cell)
         return list(zip(rows, cols))
+
+    def set_wumpus(self, wumpus: 'Wumpus'):
+        self.wumpus = wumpus
+
+    def set_firetruck(self, firetruck: 'Firetruck'):
+        self.firetruck = firetruck
 
     def update(self):
         """Update world state with delta time adjusted for the multiplier"""
@@ -92,15 +104,17 @@ class World:
                     pygame.draw.rect(self.display, self.field.get_color(cell), r)
 
     def render_spread(self):
-        """Render the radius around burning cells."""
+        """Render the radius around burning cells that haven't spread yet."""
         surface = pygame.Surface((self.display.get_width(), self.display.get_height()), pygame.SRCALPHA)
 
         for (row, col) in self.get_filtered_cells_coordinates(Cell.BURNING):
-            center_x = int((col + 0.5) * self.cell_dimensions)
-            center_y = int((row + 0.5) * self.cell_dimensions)
-            radius_pixels = int(self.field.spread_radius * self.pixels_per_meter)
-            color = (*self.field.get_color(Cell.BURNING), 50)
-            pygame.draw.circle(surface, color, (center_x, center_y), radius_pixels, radius_pixels)
+            # Only render radius for fires that haven't spread yet
+            if (row, col) not in self.field.has_spread:
+                center_x = int((col + 0.5) * self.cell_dimensions)
+                center_y = int((row + 0.5) * self.cell_dimensions)
+                radius_pixels = int(SPREAD_RADIUS * self.pixels_per_meter)
+                color = (*self.field.get_color(Cell.BURNING), 50)
+                pygame.draw.circle(surface, color, (center_x, center_y), radius_pixels, radius_pixels)
 
         self.display.blit(surface, (0, 0))
 
@@ -117,7 +131,12 @@ class World:
         # Cell states tally
         tally_str = "  ".join(f"{cell.name}: {count:<3d}" for cell, count in self.field.tally_cells().items())
 
-        text = f"{time_str}    {tally_str}    {message}"
+        # Locations
+        wumpus_location = self.wumpus.get_location()
+        firetruck_location = self.firetruck.get_location()
+        locations_str = f"Wumpus: {wumpus_location}   Firetruck: {firetruck_location}"
+
+        text = f"{time_str}    {tally_str}    {locations_str}     {message}"
 
         img = self.font.render(text, True, HUD_FONT_COLOR)
         self.display.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
