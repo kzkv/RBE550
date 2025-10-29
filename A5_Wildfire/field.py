@@ -68,6 +68,10 @@ class Field:
 
         self.world = world
 
+        # Pre-computed spread mask
+        self._spread_radius_cells = int(np.ceil(SPREAD_RADIUS / self.world.cell_size))
+        self._spread_mask = self._precompute_spread_mask()
+
     def rotate(self, shape: np.ndarray):
         return np.rot90(shape, self.rng.choice([-1, 0, 1, 2]))
 
@@ -105,6 +109,26 @@ class Field:
             self.has_spread.discard((row, col))
             return True
         return False
+
+    def _precompute_spread_mask(self):
+        """Pre-compute a reusable boolean mask for fire spread radius."""
+        cell_size = self.world.cell_size
+        spread_radius_cells = int(np.ceil(SPREAD_RADIUS / cell_size))
+
+        # Create a mask centered at (0, 0) in relative coordinates
+        r_range = np.arange(-spread_radius_cells, spread_radius_cells + 1)
+        c_range = np.arange(-spread_radius_cells, spread_radius_cells + 1)
+        r_grid, c_grid = np.meshgrid(r_range, c_range, indexing='ij')
+
+        # Calculate distances in world coordinates
+        target_x = (c_grid + 0.5) * cell_size
+        target_y = (r_grid + 0.5) * cell_size
+        center_x = 0.5 * cell_size
+        center_y = 0.5 * cell_size
+        distances = np.sqrt((target_x - center_x) ** 2 + (target_y - center_y) ** 2)
+
+        # Return the boolean mask
+        return distances <= SPREAD_RADIUS
 
     # Generate obstacle field
     def _generate_obstacles(self, grid_dimensions: int, obstacle_density: float) -> np.ndarray:
@@ -182,34 +206,19 @@ class Field:
 
         # Spread fires
         cells_to_ignite = []
+        radius = self._spread_radius_cells
         for row, col in cells_to_spread:
-            # Find all obstacles within the specified radius
-            cell_size = self.world.cell_size
-            center_x = (col + 0.5) * cell_size
-            center_y = (row + 0.5) * cell_size
+            r_slice = slice(max(0, row - radius), min(self.grid_dimensions, row + radius + 1))
+            c_slice = slice(max(0, col - radius), min(self.grid_dimensions, col + radius + 1))
 
-            # Calculate radius in grid cells
-            radius_cells = int(np.ceil(SPREAD_RADIUS / cell_size))
+            mask_slice = self._spread_mask[
+                radius - (row - r_slice.start):radius + (r_slice.stop - row),
+                radius - (col - c_slice.start):radius + (c_slice.stop - col)
+            ]
 
-            # Pre-calculate bounds
-            r_min = max(0, row - radius_cells)
-            r_max = min(self.grid_dimensions, row + radius_cells + 1)
-            c_min = max(0, col - radius_cells)
-            c_max = min(self.grid_dimensions, col + radius_cells + 1)
-            r_range = np.arange(r_min, r_max)
-            c_range = np.arange(c_min, c_max)
-            r_grid, c_grid = np.meshgrid(r_range, c_range, indexing='ij')
-
-            target_x = (c_grid + 0.5) * cell_size
-            target_y = (r_grid + 0.5) * cell_size
-            distances = np.sqrt((target_x - center_x) ** 2 + (target_y - center_y) ** 2)
-
-            # Find cells within the radius that are obstacles
-            mask = (distances <= SPREAD_RADIUS) & (self.cells[r_min:r_max, c_min:c_max] == Cell.OBSTACLE)
-            burning_r, burning_c = np.where(mask)
-
-            # Convert back to absolute coordinates
-            cells_to_ignite.extend(zip(burning_r + r_min, burning_c + c_min))
+            obstacle_mask = mask_slice & (self.cells[r_slice, c_slice] == Cell.OBSTACLE)
+            burning_r, burning_c = np.where(obstacle_mask)
+            cells_to_ignite.extend(zip(burning_r + r_slice.start, burning_c + c_slice.start))
 
         # Ignite new cells
         for row, col in cells_to_ignite:
