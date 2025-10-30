@@ -82,7 +82,7 @@ class Firetruck:
                     suppressed_count += 1
 
         if suppressed_count > 0:
-            logger.info(f"Firetruck suppressed {suppressed_count} fire(s)")
+            logger.debug(f"Firetruck suppressed {suppressed_count} fire(s)")
 
     def render(self):
         """Render vehicle at current or specified position"""

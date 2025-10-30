@@ -71,10 +71,11 @@ class World:
     def set_firetruck(self, firetruck: 'Firetruck'):
         self.firetruck = firetruck
 
-    def update(self):
+    def update(self) -> float:
         """Update world state with delta time adjusted for the multiplier"""
         dt = self.clock.tick(60) / 1000.0
         self.world_time += dt * self.time_speed
+        return dt * self.time_speed  # return time delta in world time
 
     # Rendering
     def clear(self):

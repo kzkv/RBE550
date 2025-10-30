@@ -17,13 +17,16 @@ EPSILON = 1e-6  # For floating-point comparisons and division-by-zero checks
 
 # Priority calculation weights
 WEIGHT_UNAFFECTED_OBSTACLES = 10.0  # Reward for potential damage
-WEIGHT_BURNING_PENALTY = 5.0  # Penalty for redundant ignition
+WEIGHT_BURNING_PENALTY = 75.0  # Penalty for redundant ignition
 WEIGHT_PATH_DISTANCE = 5.0  # Penalty per grid cell of actual path distance
 TRUCK_EXCLUSION_RADIUS = 10  # Cells - hard exclusion zone around truck
 
 # Goal selection parameters
 TOP_CANDIDATES_COUNT = 20  # Number of top cells to evaluate actual paths for (after rough filtering on Euclidean distance)
 MIN_SCORE_IMPROVEMENT = 1.0  # Stop evaluating if no improvement by this threshold
+
+# Motion parameters
+WUMPUS_PACE = 2.0  # Seconds per cell movement
 
 """
 Automatic goal selection algorithm:
@@ -74,6 +77,10 @@ class Wumpus:
         # Flag if already done the deed at the location
         self.has_ignited_at_location = False
 
+        # Motion execution state
+        self.pace = WUMPUS_PACE  # Seconds per cell
+        self._movement_timer = 0.0  # Accumulates time until the next movement
+
         # Load and scale the wumpus image
         self.image = pygame.image.load('assets/wumpus.png').convert_alpha()
         self.image = pygame.transform.scale(self.image, (world.cell_dimensions, world.cell_dimensions))
@@ -100,7 +107,7 @@ class Wumpus:
             path = nx.astar_path(graph, source=self.location, target=goal, heuristic=euclidean_distance)
             return path
         except (NodeNotFound, NetworkXNoPath) as e:
-            logger.warning(f"No path found from {self.location} to {goal}: {e}")
+            logger.debug(f"No path found from {self.location} to {goal}: {e}")
             return []
 
     def calculate_cell_priorities(self) -> np.ndarray:
@@ -230,21 +237,25 @@ class Wumpus:
             # Reset ignition flag when location is set (even if it's the same location)
             self.has_ignited_at_location = False  # Make sure we shouldn't check if the location hasn't changed instead
 
+        # Reset motion execution state
+        self._movement_timer = 0.0
+
     def set_goal(self, row: int, col: int):
         """Set a goal and plan a path to it"""
         if not self.world.field.in_bounds(row, col):
-            logger.warning(f"Goal {row, col} out of bounds")
+            logger.debug(f"Goal {row, col} out of bounds")
             return
 
         if self.world.field.get_cell(row, col) != Cell.EMPTY:
-            logger.warning(f"Goal {row, col} is not empty")
+            logger.debug(f"Goal {row, col} is not empty")
             return
+
+        # Reset ignition flag when a new goal is set, but only if the goal is new
+        if self.goal != (row, col):
+            self.has_ignited_at_location = False  # TODO: make sure goal setting should reset the flag
 
         self.goal = (row, col)
         self.path = self.plan_path_to(self.goal)
-
-        # Reset ignition flag when a new goal is set
-        self.has_ignited_at_location = False  # TODO: make sure goal setting should reset the flag
 
     def set_goal_auto(self):
         """Automatically select and set the best goal"""
@@ -253,10 +264,23 @@ class Wumpus:
         if target:
             self.set_goal(target[0], target[1])
         else:
-            logger.warning("No valid goal found for Wumpus")
+            logger.debug("No valid goal found for Wumpus")
 
     def get_location(self) -> tuple[int, int]:
         return int(self.location[0]), int(self.location[1])
+
+    def move(self, dt_world: float):
+        """Execute motion along the planned path with an adjustable pace."""
+
+        if not self.path or self.goal is None or self.location == self.goal:
+            return
+
+        self._movement_timer += dt_world
+
+        # Move to the next path point (self.path[0] is the current location) if enough time has passed;
+        # self.path gets recalculated on each updated either way, so the step is always toward self.path[1]
+        if self._movement_timer >= self.pace:
+            self.set_location(*self.path[1])
 
     def update(self):
         # Update cache when state changes
@@ -287,7 +311,21 @@ class Wumpus:
         # Draw path lines
         cell_dim = self.world.cell_dimensions
         points = []
-        for row, col in self.path:
+
+        # Add starting point at edge of current cell
+        curr_row, curr_col = self.path[0]
+        next_row, next_col = self.path[1]
+
+        # Calculate a direction to the next cell
+        dr = next_row - curr_row
+        dc = next_col - curr_col
+
+        # Starting point at edge of current cell (offset by 0.5 cells in a direction of travel)
+        start_x = int((curr_col + 0.5 + dc * 0.5) * cell_dim)
+        start_y = int((curr_row + 0.5 + dr * 0.5) * cell_dim)
+        points.append((start_x, start_y))
+
+        for row, col in self.path[1:]:  # Skip the first point (current location)
             center_x = int((col + 0.5) * cell_dim)
             center_y = int((row + 0.5) * cell_dim)
             points.append((center_x, center_y))

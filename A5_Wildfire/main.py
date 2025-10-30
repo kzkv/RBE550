@@ -12,7 +12,6 @@
 # TODO: motion-plan for firetruck
 
 import logging
-import math
 
 import numpy as np
 import pygame
@@ -32,7 +31,7 @@ pygame.display.set_caption("Wildfire")
 
 # SEED = 67
 SEED = 41
-TIME_SPEED = 2.0  # Time speed coefficient
+TIME_SPEED = 10.0  # Time speed coefficient
 PAR_TIME = 3600.0
 
 WUMPUS_ROWS = (0, 10)
@@ -70,7 +69,7 @@ while running:
         world.render_hud(message="Time's up!")
         continue
 
-    world.update()
+    dt_world = world.update()
     world.field.update_burning_cells()
     world.clear()
     world.render_field()
@@ -79,9 +78,10 @@ while running:
 
     wumpus.update()
     wumpus.render_priority_heatmap()
-    wumpus.set_goal_auto()
+    wumpus.move(dt_world)
     wumpus.render_path()
     wumpus.render()
+    wumpus.set_goal_auto()
 
     firetruck.update()
     firetruck.render()
