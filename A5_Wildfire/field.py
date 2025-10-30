@@ -5,6 +5,7 @@ from enum import IntEnum
 from typing import Tuple, TYPE_CHECKING
 
 import numpy as np
+from scipy.ndimage import binary_dilation
 import logging
 
 logger = logging.getLogger(__name__)
@@ -129,6 +130,21 @@ class Field:
 
         # Return the boolean mask
         return distances <= SPREAD_RADIUS
+
+    def create_location_mask(self, row: int, col: int, radius: int) -> np.ndarray:
+        """Create a dilated boolean mask around a location with the given radius"""
+        mask = np.zeros((self.grid_dimensions, self.grid_dimensions), dtype=bool)
+        
+        if not self.in_bounds(row, col):
+            return mask
+            
+        mask[row, col] = True
+        
+        if radius > 0:
+            structure = np.ones((2 * radius + 1, 2 * radius + 1), dtype=bool)
+            mask = binary_dilation(mask, structure=structure)
+        
+        return mask
 
     # Generate obstacle field
     def _generate_obstacles(self, grid_dimensions: int, obstacle_density: float) -> np.ndarray:

@@ -7,6 +7,7 @@ import networkx as nx
 import numpy as np
 import pygame
 from networkx.exception import NodeNotFound, NetworkXNoPath
+from scipy.ndimage import binary_dilation
 
 from field import Cell
 from world import World
@@ -19,7 +20,8 @@ EPSILON = 1e-6  # For floating-point comparisons and division-by-zero checks
 WEIGHT_UNAFFECTED_OBSTACLES = 10.0  # Reward for potential damage
 WEIGHT_BURNING_PENALTY = 75.0  # Penalty for redundant ignition
 WEIGHT_PATH_DISTANCE = 5.0  # Penalty per grid cell of actual path distance
-TRUCK_EXCLUSION_RADIUS = 10  # Cells - hard exclusion zone around truck
+TRUCK_GOAL_EXCLUSION_RADIUS = 10  # Cells - hard exclusion zone around truck for finding the best goal cell
+TRUCK_PATH_AVOIDANCE_RADIUS = 3  # Radius around truck for motion planning purposes
 
 # Goal selection parameters
 TOP_CANDIDATES_COUNT = 20  # Number of top cells to evaluate actual paths for (after rough filtering on Euclidean distance)
@@ -59,6 +61,12 @@ Conflagration rules:
     1. Ignites a random neighbor
     2. Only ignites if at a goal cell
     3. Can only ignite again after movement
+    
+Path planning details:
+    - Use A* to find a path from the current location to the goal
+    - Use a graph to avoid obstacles and cells near the truck
+    - Make sure to include cells surrounding the Wumpus in the graph to provide an escape route
+    - Only the cell that the truck occupies is always excluded from the graph (Wumpus sits tight until the truck moves)
 """
 
 
@@ -86,14 +94,29 @@ class Wumpus:
         self.image = pygame.transform.scale(self.image, (world.cell_dimensions, world.cell_dimensions))
 
     def _graph_from_field(self) -> nx.Graph:
-        """Build a graph from the field, removing impassable cells"""
+        """Build a graph from the field, removing impassable cells and cells near the truck"""
         field = self.world.field
         G = nx.grid_2d_graph(field.grid_dimensions, field.grid_dimensions)
 
         # Remove obstacle, burning, and burned cells
         impassable = np.isin(field.cells, [Cell.OBSTACLE, Cell.BURNING, Cell.BURNED])
-        avoid = zip(*impassable.nonzero())
-        G.remove_nodes_from(avoid)
+
+        # Create avoidance zone around truck
+        truck_row, truck_col = self.world.firetruck.get_location()
+        truck_avoidance = field.create_location_mask(truck_row, truck_col, TRUCK_PATH_AVOIDANCE_RADIUS)
+        
+        # Create an escape zone around Wumpus (same radius, allowing escape through the zone)
+        wumpus_row, wumpus_col = self.location
+        wumpus_escape = field.create_location_mask(wumpus_row, wumpus_col, TRUCK_PATH_AVOIDANCE_RADIUS)
+        
+        # Allow Wumpus to move through its escape zone, but never through the truck's actual cell
+        truck_actual_cell = field.create_location_mask(truck_row, truck_col, radius=0)
+        truck_avoidance = truck_avoidance & ~wumpus_escape | truck_actual_cell
+
+        # Combine all cells to avoid
+        avoid = impassable | truck_avoidance
+        avoid_nodes = zip(*avoid.nonzero())
+        G.remove_nodes_from(avoid_nodes)
         return G
 
     def plan_path_to(self, goal: tuple[int, int], graph: nx.Graph = None) -> list[tuple[int, int]]:
@@ -116,12 +139,10 @@ class Wumpus:
         Cells near the truck or near burning cells are excluded from consideration.
         Returns: 2D array of priority scores (same shape as grid)
         """
-        from scipy.ndimage import binary_dilation
-
         field = self.world.field
         priorities = np.full((field.grid_dimensions, field.grid_dimensions), -np.inf, dtype=float)
 
-        # Find empty cells adjacent to UNBURNED obstacles only
+        # Find empty cells adjacent to unburned obstacles only
         obstacle_mask = (field.cells == Cell.OBSTACLE)  # Only unburned obstacles
         dilated_obstacles = binary_dilation(obstacle_mask, structure=np.ones((3, 3)))
         empty_cells = (field.cells == Cell.EMPTY)
@@ -131,13 +152,7 @@ class Wumpus:
 
         # Exclude cells near the truck
         truck_row, truck_col = self.world.firetruck.get_location()
-        row_indices, col_indices = np.meshgrid(
-            np.arange(field.grid_dimensions),
-            np.arange(field.grid_dimensions),
-            indexing='ij'
-        )
-        truck_distances = np.sqrt((row_indices - truck_row) ** 2 + (col_indices - truck_col) ** 2)
-        truck_exclusion = truck_distances < TRUCK_EXCLUSION_RADIUS
+        truck_exclusion = field.create_location_mask(truck_row, truck_col, TRUCK_GOAL_EXCLUSION_RADIUS)
 
         # Remove truck-adjacent cells from valid targets
         valid_targets = valid_targets & ~truck_exclusion
@@ -147,6 +162,11 @@ class Wumpus:
 
         # Pre-compute Wumpus distance penalty map
         wumpus_row, wumpus_col = self.location
+        row_indices, col_indices = np.meshgrid(
+            np.arange(field.grid_dimensions),
+            np.arange(field.grid_dimensions),
+            indexing='ij'
+        )
         wumpus_distances = np.sqrt((row_indices - wumpus_row) ** 2 + (col_indices - wumpus_col) ** 2)
         path_penalty = wumpus_distances * WEIGHT_PATH_DISTANCE
 

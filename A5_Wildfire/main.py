@@ -2,9 +2,6 @@
 # RBE 550, Assignment 5, Wildfire
 # See Gen AI usage approach write-up in the report
 
-# TODO: Wumpus only ignites one cell
-
-# TODO: make Wumpus move to the highest priority cell
 # TODO: move the truck to see how Wumpus alters the plan
 
 # TODO: scores for Wumpus and firetruck
@@ -15,6 +12,7 @@ import logging
 
 import numpy as np
 import pygame
+import math
 
 from wumpus import Wumpus
 from firetruck import Firetruck
@@ -22,7 +20,7 @@ from world import World
 from field import Cell
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 rng = np.random.default_rng()
 
@@ -59,10 +57,10 @@ while running:
             if world.field.get_cell(row, col) == Cell.OBSTACLE:
                 world.field.ignite(row, col)
             elif world.field.get_cell(row, col) == Cell.EMPTY:
-                # heading = -math.pi / 2
-                # firetruck.set_pose(firetruck.grid_to_pose((row, col), heading))
-                wumpus.set_goal(row, col)
-                wumpus.set_location(row, col)
+                heading = -math.pi / 2
+                firetruck.set_pose(firetruck.grid_to_pose((row, col), heading))
+                # wumpus.set_goal(row, col)
+                # wumpus.set_location(row, col)
 
     if world.world_time >= PAR_TIME:
         # TODO: consider what parts of the rendering should be done here
