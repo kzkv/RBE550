@@ -2,7 +2,19 @@
 # RBE 550, Assignment 5, Wildfire
 # See Gen AI usage approach write-up in the report
 
-# TODO: motion-plan for firetruck
+# Motion-plan for firetruck
+# TODO: get all of the cells of interest + cells that will be the connecting navigation points; include the origin point connection
+# TODO: build a lattice for the roadmap using Reed-Shepp
+# TODO: drive toward the selected point; accel/decel
+# TODO: establish points of interest for the firetruck
+# TODO: drive toward the max interest point
+# TODO: consider trajectory follower to avoid pauses between segments
+# TODO: tune the simulation
+
+# Performance profiling
+# TODO: run cpython profiling
+# TODO: see if in-run profiling is necessary
+
 
 import logging
 
