@@ -98,8 +98,13 @@ class Field:
         if self.get_cell(row, col) == Cell.OBSTACLE:
             self.set_cell(row, col, Cell.BURNING)
             self.ignition_times[(row, col)] = self.world.world_time
+            
+            # Award 1 point to Wumpus for igniting
+            self.world.wumpus_score += 1
+            logger.debug(f"Wumpus scored 1 point for igniting ({row}, {col})")
+            
             return True
-        return False  # TODO: refactor to remove the return feedback if not needed
+        return False
 
     def suppress(self, row: int, col: int) -> bool:
         """Put out fire in a cell if it's burning."""
@@ -108,6 +113,11 @@ class Field:
             if (row, col) in self.ignition_times:
                 del self.ignition_times[(row, col)]
             self.has_spread.discard((row, col))
+            
+            # Award 2 points to Firetruck for suppressing
+            self.world.firetruck_score += 2
+            logger.debug(f"Firetruck scored 2 points for suppressing ({row}, {col})")
+            
             return True
         return False
 
@@ -245,6 +255,10 @@ class Field:
             self.set_cell(row, col, Cell.BURNED)
             del self.ignition_times[(row, col)]
             self.has_spread.discard((row, col))
+            
+            # Award 1 additional point to Wumpus for burning out an obstacle
+            self.world.wumpus_score += 1
+            logger.debug(f"Wumpus scored 1 point for burning out ({row}, {col})")
 
     def get_cell_neighbors(self, location: tuple[int, int]) -> list[tuple[int, int]]:
         """Get up to 8 neighbors of a cell (fewer if on the edge)"""

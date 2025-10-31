@@ -41,6 +41,10 @@ class World:
         self.field = Field(seed, self.grid_dimensions, OBSTACLE_DENSITY, world=self)
         self.wumpus = None
         self.firetruck = None
+        
+        # Scoring
+        self.wumpus_score = 0
+        self.firetruck_score = 0
 
         self.display = pygame.display.set_mode((self.field_dimensions, self.field_dimensions + self.hud_height))
 
@@ -122,6 +126,8 @@ class World:
     def render_hud(self, message: str = ""):
         HUD_BG_COLOR = (0, 0, 0)
         HUD_FONT_COLOR = (200, 200, 200)
+        WUMPUS_COLOR = (162, 32, 174)
+        FIRETRUCK_COLOR = (220, 50, 50)
 
         hud_rect = pygame.Rect(0, self.field_dimensions, self.field_dimensions, self.hud_height)
         pygame.draw.rect(self.display, HUD_BG_COLOR, hud_rect)
@@ -132,12 +138,15 @@ class World:
         # Cell states tally
         tally_str = "  ".join(f"{cell.name}: {count:<3d}" for cell, count in self.field.tally_cells().items())
 
+        # Scores (color-coded)
+        score_str = f"WU: {self.wumpus_score:<3d} FT: {self.firetruck_score:<3d}"
+
         # Locations
         wumpus_location = self.wumpus.get_location()
         firetruck_location = self.firetruck.get_location()
-        locations_str = f"Wumpus: {wumpus_location}   Firetruck: {firetruck_location}"
+        locations_str = f"WU: {wumpus_location} FT: {firetruck_location}"
 
-        text = f"{time_str}    {tally_str}    {locations_str}     {message}"
+        text = " | ".join([s for s in [score_str, time_str, tally_str, locations_str, message] if s])
 
         img = self.font.render(text, True, HUD_FONT_COLOR)
         self.display.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))

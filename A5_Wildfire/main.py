@@ -2,8 +2,6 @@
 # RBE 550, Assignment 5, Wildfire
 # See Gen AI usage approach write-up in the report
 
-# TODO: move the truck to see how Wumpus alters the plan
-
 # TODO: scores for Wumpus and firetruck
 
 # TODO: motion-plan for firetruck
@@ -82,6 +80,6 @@ while running:
     wumpus.set_goal_auto()
 
     firetruck.update()
-    firetruck.render()
+    firetruck.render()  # Wumpus needs to be able to hide under the firetruck, so rendering order matters
 
     pygame.display.flip()
