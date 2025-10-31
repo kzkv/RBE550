@@ -104,11 +104,11 @@ class Wumpus:
         # Create avoidance zone around truck
         truck_row, truck_col = self.world.firetruck.get_location()
         truck_avoidance = field.create_location_mask(truck_row, truck_col, TRUCK_PATH_AVOIDANCE_RADIUS)
-        
+
         # Create an escape zone around Wumpus (same radius, allowing escape through the zone)
         wumpus_row, wumpus_col = self.location
         wumpus_escape = field.create_location_mask(wumpus_row, wumpus_col, TRUCK_PATH_AVOIDANCE_RADIUS)
-        
+
         # Allow Wumpus to move through its escape zone, but never through the truck's actual cell
         truck_actual_cell = field.create_location_mask(truck_row, truck_col, radius=0)
         truck_avoidance = truck_avoidance & ~wumpus_escape | truck_actual_cell
@@ -360,34 +360,24 @@ class Wumpus:
             pygame.draw.circle(self.world.display, GOAL_COLOR, (goal_x, goal_y), 10, 2)
 
     def render_priority_heatmap(self):
-        """Render priority heatmap overlay for debugging. Only shows valid targets."""
-        valid_mask = self._cached_priorities > -np.inf
-
-        if not np.any(valid_mask):
-            return  # No valid targets to visualize
-
-        # Normalize only valid priorities
-        valid_priorities = self._cached_priorities[valid_mask]
-        p_min, p_max = valid_priorities.min(), valid_priorities.max()
-
-        if p_max - p_min < EPSILON:
-            return
-
-        priorities_norm = (self._cached_priorities - p_min) / (p_max - p_min)
-
-        cell_dim = self.world.cell_dimensions
+        """Render priority heatmap overlay for debugging. Only shows top candidates (same as _select_best_goal)"""
         WUMPUS_PURPLE = (162, 32, 174)
 
-        # Render heatmap only for valid target cells
-        for row in range(self.world.field.grid_dimensions):
-            for col in range(self.world.field.grid_dimensions):
-                if not valid_mask[row, col]:
-                    continue
+        flat_indices = np.argsort(self._cached_priorities.ravel())[::-1]  # Descending order
+        top_indices = flat_indices[:TOP_CANDIDATES_COUNT]
+        top_rows, top_cols = np.unravel_index(top_indices, self._cached_priorities.shape)
 
-                # Vary alpha: high priority = opaque, low priority = transparent
-                alpha = int(priorities_norm[row, col] * 200)
+        top_priorities = self._cached_priorities[top_rows, top_cols]
+        p_min, p_max = top_priorities.min(), top_priorities.max()
 
-                x, y = col * cell_dim, row * cell_dim
-                surf = pygame.Surface((cell_dim, cell_dim), pygame.SRCALPHA)
-                surf.fill((*WUMPUS_PURPLE, alpha))
-                self.world.display.blit(surf, (x, y))
+        priorities_normalized = (top_priorities - p_min) / (p_max - p_min)
+        cell_dim = self.world.cell_dimensions
+
+        # Render heatmap
+        for row, col, normalized in zip(top_rows, top_cols, priorities_normalized):
+            alpha = int(normalized * 100)  # Vary alpha: high priority = opaque, low priority = transparent
+
+            x, y = col * cell_dim, row * cell_dim
+            surf = pygame.Surface((cell_dim, cell_dim), pygame.SRCALPHA)
+            surf.fill((*WUMPUS_PURPLE, alpha))
+            self.world.display.blit(surf, (x, y))

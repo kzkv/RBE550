@@ -2,8 +2,6 @@
 # RBE 550, Assignment 5, Wildfire
 # See Gen AI usage approach write-up in the report
 
-# TODO: scores for Wumpus and firetruck
-
 # TODO: motion-plan for firetruck
 
 import logging
@@ -47,6 +45,7 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
+            # TODO: remove the manual controls when no longer needed
             # Ignite on mouse click
             mx, my = pygame.mouse.get_pos()
             x, y = world.pixel_to_world(mx, my)
