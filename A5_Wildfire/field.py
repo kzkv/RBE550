@@ -30,6 +30,7 @@ Fire propagation logic:
 
 class Cell(IntEnum):
     """Cell states"""
+
     EMPTY = 0
     OBSTACLE = 1
     BURNING = 2
@@ -40,14 +41,14 @@ CELL_COLORS = {
     Cell.EMPTY: (255, 255, 255),
     Cell.OBSTACLE: (50, 50, 50),
     Cell.BURNING: (255, 75, 0),
-    Cell.BURNED: (150, 150, 150)
+    Cell.BURNED: (150, 150, 150),
 }
 
 
 class Field:
     """Game field manager"""
 
-    def __init__(self, seed, grid_dimensions, obstacle_density, world: 'World'):
+    def __init__(self, seed, grid_dimensions, obstacle_density, world: "World"):
         self.rng = np.random.default_rng(seed)
         self.grid_dimensions = grid_dimensions
 
@@ -58,7 +59,7 @@ class Field:
             [[1, 0, 0], [1, 1, 1]],  # J
             [[0, 1, 1], [1, 1, 0]],  # S-skew
             [[1, 1, 0], [0, 1, 1]],  # Z-skew
-            [[1, 1, 1], [0, 1, 0]]  # T
+            [[1, 1, 1], [0, 1, 0]],  # T
         )
 
         self.cells = self._generate_obstacles(grid_dimensions, obstacle_density)
@@ -98,11 +99,11 @@ class Field:
         if self.get_cell(row, col) == Cell.OBSTACLE:
             self.set_cell(row, col, Cell.BURNING)
             self.ignition_times[(row, col)] = self.world.world_time
-            
+
             # Award 1 point to Wumpus for igniting
             self.world.wumpus_score += 1
             logger.debug(f"Wumpus scored 1 point for igniting ({row}, {col})")
-            
+
             return True
         return False
 
@@ -113,11 +114,11 @@ class Field:
             if (row, col) in self.ignition_times:
                 del self.ignition_times[(row, col)]
             self.has_spread.discard((row, col))
-            
+
             # Award 2 points to Firetruck for suppressing
             self.world.firetruck_score += 2
             logger.debug(f"Firetruck scored 2 points for suppressing ({row}, {col})")
-            
+
             return True
         return False
 
@@ -129,7 +130,7 @@ class Field:
         # Create a mask centered at (0, 0) in relative coordinates
         r_range = np.arange(-spread_radius_cells, spread_radius_cells + 1)
         c_range = np.arange(-spread_radius_cells, spread_radius_cells + 1)
-        r_grid, c_grid = np.meshgrid(r_range, c_range, indexing='ij')
+        r_grid, c_grid = np.meshgrid(r_range, c_range, indexing="ij")
 
         # Calculate distances in world coordinates
         target_x = (c_grid + 0.5) * cell_size
@@ -144,20 +145,22 @@ class Field:
     def create_location_mask(self, row: int, col: int, radius: int) -> np.ndarray:
         """Create a dilated boolean mask around a location with the given radius"""
         mask = np.zeros((self.grid_dimensions, self.grid_dimensions), dtype=bool)
-        
+
         if not self.in_bounds(row, col):
             return mask
-            
+
         mask[row, col] = True
-        
+
         if radius > 0:
             structure = np.ones((2 * radius + 1, 2 * radius + 1), dtype=bool)
             mask = binary_dilation(mask, structure=structure)
-        
+
         return mask
 
     # Generate obstacle field
-    def _generate_obstacles(self, grid_dimensions: int, obstacle_density: float) -> np.ndarray:
+    def _generate_obstacles(
+        self, grid_dimensions: int, obstacle_density: float
+    ) -> np.ndarray:
         field = np.zeros((grid_dimensions, grid_dimensions), dtype=int)
 
         cell_target = int(obstacle_density * grid_dimensions * grid_dimensions)
@@ -181,7 +184,7 @@ class Field:
                 col = self.rng.integers(0, grid_dimensions - mask_width + 1)
 
                 # Apply mask directly (overlapping allowed)
-                field[row:row + mask_height, col:col + mask_width] = mask
+                field[row : row + mask_height, col : col + mask_width] = mask
 
             # Update coverage statistics
             cell_coverage = np.count_nonzero(field)
@@ -234,17 +237,23 @@ class Field:
         cells_to_ignite = []
         radius = self.spread_radius_cells
         for row, col in cells_to_spread:
-            r_slice = slice(max(0, row - radius), min(self.grid_dimensions, row + radius + 1))
-            c_slice = slice(max(0, col - radius), min(self.grid_dimensions, col + radius + 1))
+            r_slice = slice(
+                max(0, row - radius), min(self.grid_dimensions, row + radius + 1)
+            )
+            c_slice = slice(
+                max(0, col - radius), min(self.grid_dimensions, col + radius + 1)
+            )
 
             mask_slice = self.spread_mask[
-                radius - (row - r_slice.start):radius + (r_slice.stop - row),
-                radius - (col - c_slice.start):radius + (c_slice.stop - col)
+                radius - (row - r_slice.start) : radius + (r_slice.stop - row),
+                radius - (col - c_slice.start) : radius + (c_slice.stop - col),
             ]
 
             obstacle_mask = mask_slice & (self.cells[r_slice, c_slice] == Cell.OBSTACLE)
             burning_r, burning_c = np.where(obstacle_mask)
-            cells_to_ignite.extend(zip(burning_r + r_slice.start, burning_c + c_slice.start))
+            cells_to_ignite.extend(
+                zip(burning_r + r_slice.start, burning_c + c_slice.start)
+            )
 
         # Ignite new cells
         for row, col in cells_to_ignite:
@@ -255,7 +264,7 @@ class Field:
             self.set_cell(row, col, Cell.BURNED)
             del self.ignition_times[(row, col)]
             self.has_spread.discard((row, col))
-            
+
             # Award 1 additional point to Wumpus for burning out an obstacle
             self.world.wumpus_score += 1
             logger.debug(f"Wumpus scored 1 point for burning out ({row}, {col})")
@@ -263,8 +272,21 @@ class Field:
     def get_cell_neighbors(self, location: tuple[int, int]) -> list[tuple[int, int]]:
         """Get up to 8 neighbors of a cell (fewer if on the edge)"""
         row, col = location
-        neighbor_offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-        return [(row + dr, col + dc) for dr, dc in neighbor_offsets if self.in_bounds(row + dr, col + dc)]
+        neighbor_offsets = [
+            (-1, -1),
+            (-1, 0),
+            (-1, 1),
+            (0, -1),
+            (0, 1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+        ]
+        return [
+            (row + dr, col + dc)
+            for dr, dc in neighbor_offsets
+            if self.in_bounds(row + dr, col + dc)
+        ]
 
     def has_all_empty_neighbors(self, location: tuple[int, int]):
         """Check if all in-bounds neighbors are empty"""
@@ -273,21 +295,41 @@ class Field:
 
     def ignite_neighbors(self, location: tuple[int, int]) -> int:
         """Ignite all obstacle neighbors of a cell"""
-        ignited = sum(self.ignite(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(location))
+        ignited = sum(
+            self.ignite(n_row, n_col)
+            for n_row, n_col in self.get_cell_neighbors(location)
+        )
         return ignited
 
     def ignite_random_neighbor(self, location: tuple[int, int]) -> bool:
         """Ignite a random obstacle neighbor of a cell"""
         neighbors = self.get_cell_neighbors(location)
-        obstacle_neighbors = [(row, col) for row, col in neighbors if self.get_cell(row, col) == Cell.OBSTACLE]
-        return self.ignite(*self.rng.choice(obstacle_neighbors)) if obstacle_neighbors else False
+        obstacle_neighbors = [
+            (row, col)
+            for row, col in neighbors
+            if self.get_cell(row, col) == Cell.OBSTACLE
+        ]
+        return (
+            self.ignite(*self.rng.choice(obstacle_neighbors))
+            if obstacle_neighbors
+            else False
+        )
 
     def suppress_neighbors(self, location: tuple[int, int]) -> int:
-        suppressed = sum(self.suppress(n_row, n_col) for n_row, n_col in self.get_cell_neighbors(location))
+        suppressed = sum(
+            self.suppress(n_row, n_col)
+            for n_row, n_col in self.get_cell_neighbors(location)
+        )
         return suppressed
 
     def tally_cells(self):
         # Count cells by status; exclude empty, always include other statuses counts (even if not present)
         tally = {cell: 0 for cell in Cell.__members__.values() if cell != Cell.EMPTY}
-        tally.update({Cell(s): int(c) for s, c in zip(*np.unique(self.cells, return_counts=True)) if s != Cell.EMPTY})
+        tally.update(
+            {
+                Cell(s): int(c)
+                for s, c in zip(*np.unique(self.cells, return_counts=True))
+                if s != Cell.EMPTY
+            }
+        )
         return tally

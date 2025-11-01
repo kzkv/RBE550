@@ -20,13 +20,19 @@ class Firetruck:
     Basic stub implementation with pose management and rendering.
     """
 
-    def __init__(self, world: 'World', preset_rows: tuple[int, int], preset_cols: tuple[int, int]):
+    def __init__(
+        self, world: "World", preset_rows: tuple[int, int], preset_cols: tuple[int, int]
+    ):
         self.world = world
 
-        initial_location = self.world.field.initialize_location(preset_rows, preset_cols)
+        initial_location = self.world.field.initialize_location(
+            preset_rows, preset_cols
+        )
         self.pos = self.grid_to_pose(initial_location, INITIAL_HEADING)
         self.location = initial_location
-        self.location_arrival = 0.0  # Time at which the firetruck arrived at the location
+        self.location_arrival = (
+            0.0  # Time at which the firetruck arrived at the location
+        )
 
         # Truck specifications
         self.length = 4.9  # m
@@ -66,7 +72,8 @@ class Firetruck:
 
         # Filter for burning neighbors
         burning_neighbors = [
-            pos for pos in neighbors
+            pos
+            for pos in neighbors
             if self.world.field.get_cell(pos[0], pos[1]) == Cell.BURNING
         ]
 
@@ -103,7 +110,12 @@ class Firetruck:
         # Indicate front
         stripe_w = 3  # px
         stripe_x = Lpx - stripe_w - 6
-        pygame.draw.rect(surf, FIRETRUCK_STRIPE_COLOR, (stripe_x, 3, stripe_w, Wpx - 6), border_radius=2)
+        pygame.draw.rect(
+            surf,
+            FIRETRUCK_STRIPE_COLOR,
+            (stripe_x, 3, stripe_w, Wpx - 6),
+            border_radius=2,
+        )
 
         # Rotate to the current heading
         rotated = pygame.transform.rotate(surf, -math.degrees(self.pos.heading))
@@ -116,5 +128,11 @@ class Firetruck:
     def render_route(self, route: List[Pos], color: Tuple[int, int, int]):
         if len(route) < 2:
             return  # Need at least 2 points to draw a line
-        pts = [(int(pos.x * self.world.pixels_per_meter), int(pos.y * self.world.pixels_per_meter)) for pos in route]
+        pts = [
+            (
+                int(pos.x * self.world.pixels_per_meter),
+                int(pos.y * self.world.pixels_per_meter),
+            )
+            for pos in route
+        ]
         pygame.draw.lines(self.world.display, color, False, pts, 2)

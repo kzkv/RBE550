@@ -20,7 +20,9 @@ EPSILON = 1e-6  # For floating-point comparisons and division-by-zero checks
 WEIGHT_UNAFFECTED_OBSTACLES = 10.0  # Reward for potential damage
 WEIGHT_BURNING_PENALTY = 75.0  # Penalty for redundant ignition
 WEIGHT_PATH_DISTANCE = 5.0  # Penalty per grid cell of actual path distance
-TRUCK_GOAL_EXCLUSION_RADIUS = 10  # Cells - hard exclusion zone around truck for finding the best goal cell
+TRUCK_GOAL_EXCLUSION_RADIUS = (
+    10  # Cells - hard exclusion zone around truck for finding the best goal cell
+)
 TRUCK_PATH_AVOIDANCE_RADIUS = 3  # Radius around truck for motion planning purposes
 
 # Goal selection parameters
@@ -73,7 +75,9 @@ Path planning details:
 class Wumpus:
     """Standard-issue Wumpus"""
 
-    def __init__(self, world: 'World', preset_rows: tuple[int, int], preset_cols: tuple[int, int]):
+    def __init__(
+        self, world: "World", preset_rows: tuple[int, int], preset_cols: tuple[int, int]
+    ):
         self.world = world
         self.location = self.world.field.initialize_location(preset_rows, preset_cols)
         self.goal = None  # (row, col) goal location
@@ -90,8 +94,10 @@ class Wumpus:
         self._movement_timer = 0.0  # Accumulates time until the next movement
 
         # Load and scale the wumpus image
-        self.image = pygame.image.load('assets/wumpus.png').convert_alpha()
-        self.image = pygame.transform.scale(self.image, (world.cell_dimensions, world.cell_dimensions))
+        self.image = pygame.image.load("assets/wumpus.png").convert_alpha()
+        self.image = pygame.transform.scale(
+            self.image, (world.cell_dimensions, world.cell_dimensions)
+        )
 
     def _graph_from_field(self) -> nx.Graph:
         """Build a graph from the field, removing impassable cells and cells near the truck"""
@@ -103,11 +109,15 @@ class Wumpus:
 
         # Create avoidance zone around truck
         truck_row, truck_col = self.world.firetruck.get_location()
-        truck_avoidance = field.create_location_mask(truck_row, truck_col, TRUCK_PATH_AVOIDANCE_RADIUS)
+        truck_avoidance = field.create_location_mask(
+            truck_row, truck_col, TRUCK_PATH_AVOIDANCE_RADIUS
+        )
 
         # Create an escape zone around Wumpus (same radius, allowing escape through the zone)
         wumpus_row, wumpus_col = self.location
-        wumpus_escape = field.create_location_mask(wumpus_row, wumpus_col, TRUCK_PATH_AVOIDANCE_RADIUS)
+        wumpus_escape = field.create_location_mask(
+            wumpus_row, wumpus_col, TRUCK_PATH_AVOIDANCE_RADIUS
+        )
 
         # Allow Wumpus to move through its escape zone, but never through the truck's actual cell
         truck_actual_cell = field.create_location_mask(truck_row, truck_col, radius=0)
@@ -119,15 +129,21 @@ class Wumpus:
         G.remove_nodes_from(avoid_nodes)
         return G
 
-    def plan_path_to(self, goal: tuple[int, int], graph: nx.Graph = None) -> list[tuple[int, int]]:
+    def plan_path_to(
+        self, goal: tuple[int, int], graph: nx.Graph = None
+    ) -> list[tuple[int, int]]:
         """Plan a path from the current location to the goal using A*"""
         if not graph:
             graph = self._graph_from_field()
 
         try:
             # Euclidean distance heuristic
-            euclidean_distance = lambda u, v: ((u[0] - v[0]) ** 2 + (u[1] - v[1]) ** 2) ** 0.5
-            path = nx.astar_path(graph, source=self.location, target=goal, heuristic=euclidean_distance)
+            euclidean_distance = (
+                lambda u, v: ((u[0] - v[0]) ** 2 + (u[1] - v[1]) ** 2) ** 0.5
+            )
+            path = nx.astar_path(
+                graph, source=self.location, target=goal, heuristic=euclidean_distance
+            )
             return path
         except (NodeNotFound, NetworkXNoPath) as e:
             logger.debug(f"No path found from {self.location} to {goal}: {e}")
@@ -140,19 +156,23 @@ class Wumpus:
         Returns: 2D array of priority scores (same shape as grid)
         """
         field = self.world.field
-        priorities = np.full((field.grid_dimensions, field.grid_dimensions), -np.inf, dtype=float)
+        priorities = np.full(
+            (field.grid_dimensions, field.grid_dimensions), -np.inf, dtype=float
+        )
 
         # Find empty cells adjacent to unburned obstacles only
-        obstacle_mask = (field.cells == Cell.OBSTACLE)  # Only unburned obstacles
+        obstacle_mask = field.cells == Cell.OBSTACLE  # Only unburned obstacles
         dilated_obstacles = binary_dilation(obstacle_mask, structure=np.ones((3, 3)))
-        empty_cells = (field.cells == Cell.EMPTY)
+        empty_cells = field.cells == Cell.EMPTY
 
         # Valid targets: empty cells adjacent to unburned obstacles
         valid_targets = empty_cells & dilated_obstacles
 
         # Exclude cells near the truck
         truck_row, truck_col = self.world.firetruck.get_location()
-        truck_exclusion = field.create_location_mask(truck_row, truck_col, TRUCK_GOAL_EXCLUSION_RADIUS)
+        truck_exclusion = field.create_location_mask(
+            truck_row, truck_col, TRUCK_GOAL_EXCLUSION_RADIUS
+        )
 
         # Remove truck-adjacent cells from valid targets
         valid_targets = valid_targets & ~truck_exclusion
@@ -165,9 +185,11 @@ class Wumpus:
         row_indices, col_indices = np.meshgrid(
             np.arange(field.grid_dimensions),
             np.arange(field.grid_dimensions),
-            indexing='ij'
+            indexing="ij",
         )
-        wumpus_distances = np.sqrt((row_indices - wumpus_row) ** 2 + (col_indices - wumpus_col) ** 2)
+        wumpus_distances = np.sqrt(
+            (row_indices - wumpus_row) ** 2 + (col_indices - wumpus_col) ** 2
+        )
         path_penalty = wumpus_distances * WEIGHT_PATH_DISTANCE
 
         # Iterate through only valid target cells
@@ -177,12 +199,16 @@ class Wumpus:
                     continue
 
                 # Extract region within the spread radius
-                r_slice = slice(max(0, row - radius), min(field.grid_dimensions, row + radius + 1))
-                c_slice = slice(max(0, col - radius), min(field.grid_dimensions, col + radius + 1))
+                r_slice = slice(
+                    max(0, row - radius), min(field.grid_dimensions, row + radius + 1)
+                )
+                c_slice = slice(
+                    max(0, col - radius), min(field.grid_dimensions, col + radius + 1)
+                )
 
                 mask_slice = spread_mask[
-                    radius - (row - r_slice.start):radius + (r_slice.stop - row),
-                    radius - (col - c_slice.start):radius + (c_slice.stop - col)
+                    radius - (row - r_slice.start) : radius + (r_slice.stop - row),
+                    radius - (col - c_slice.start) : radius + (c_slice.stop - col),
                 ]
 
                 region = field.cells[r_slice, c_slice]
@@ -209,9 +235,13 @@ class Wumpus:
         Returns: (row, col) of the best target, or None if no valid target
         """
         # Find top candidates
-        flat_indices = np.argsort(self._cached_priorities.ravel())[::-1]  # Descending order
+        flat_indices = np.argsort(self._cached_priorities.ravel())[
+            ::-1
+        ]  # Descending order
         top_indices = flat_indices[:TOP_CANDIDATES_COUNT]
-        top_candidates = [np.unravel_index(idx, self._cached_priorities.shape) for idx in top_indices]
+        top_candidates = [
+            np.unravel_index(idx, self._cached_priorities.shape) for idx in top_indices
+        ]
 
         # Build graph once for all path calculations
         graph = self._graph_from_field()
@@ -272,7 +302,9 @@ class Wumpus:
 
         # Reset ignition flag when a new goal is set, but only if the goal is new
         if self.goal != (row, col):
-            self.has_ignited_at_location = False  # TODO: make sure goal setting should reset the flag
+            self.has_ignited_at_location = (
+                False  # TODO: make sure goal setting should reset the flag
+            )
 
         self.goal = (row, col)
         self.path = self.plan_path_to(self.goal)
@@ -363,9 +395,13 @@ class Wumpus:
         """Render priority heatmap overlay for debugging. Only shows top candidates (same as _select_best_goal)"""
         WUMPUS_PURPLE = (162, 32, 174)
 
-        flat_indices = np.argsort(self._cached_priorities.ravel())[::-1]  # Descending order
+        flat_indices = np.argsort(self._cached_priorities.ravel())[
+            ::-1
+        ]  # Descending order
         top_indices = flat_indices[:TOP_CANDIDATES_COUNT]
-        top_rows, top_cols = np.unravel_index(top_indices, self._cached_priorities.shape)
+        top_rows, top_cols = np.unravel_index(
+            top_indices, self._cached_priorities.shape
+        )
 
         top_priorities = self._cached_priorities[top_rows, top_cols]
         p_min, p_max = top_priorities.min(), top_priorities.max()
@@ -375,7 +411,9 @@ class Wumpus:
 
         # Render heatmap
         for row, col, normalized in zip(top_rows, top_cols, priorities_normalized):
-            alpha = int(normalized * 100)  # Vary alpha: high priority = opaque, low priority = transparent
+            alpha = int(
+                normalized * 100
+            )  # Vary alpha: high priority = opaque, low priority = transparent
 
             x, y = col * cell_dim, row * cell_dim
             surf = pygame.Surface((cell_dim, cell_dim), pygame.SRCALPHA)

@@ -7,7 +7,7 @@
 # TODO: build a lattice for the roadmap using Reed-Shepp
 # TODO: drive toward the selected point; accel/decel
 # TODO: establish points of interest for the firetruck
-# TODO: drive toward the max interest point
+# TODO: drive toward the max interest point; take into account accel/decel
 # TODO: consider trajectory follower to avoid pauses between segments
 # TODO: tune the simulation
 

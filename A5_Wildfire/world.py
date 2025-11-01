@@ -41,12 +41,14 @@ class World:
         self.field = Field(seed, self.grid_dimensions, OBSTACLE_DENSITY, world=self)
         self.wumpus = None
         self.firetruck = None
-        
+
         # Scoring
         self.wumpus_score = 0
         self.firetruck_score = 0
 
-        self.display = pygame.display.set_mode((self.field_dimensions, self.field_dimensions + self.hud_height))
+        self.display = pygame.display.set_mode(
+            (self.field_dimensions, self.field_dimensions + self.hud_height)
+        )
 
     def grid_to_world(self, row: int, col: int) -> tuple[float, float]:
         """Returns the (x, y) center of the cell in meters from the upper left corner at the given (row, col)"""
@@ -64,15 +66,15 @@ class World:
         """Mouse pixel -> world coordinates (in meters)"""
         return px / self.pixels_per_meter, py / self.pixels_per_meter
 
-    def get_filtered_cells_coordinates(self, cell: 'Cell') -> list[tuple[int, int]]:
+    def get_filtered_cells_coordinates(self, cell: "Cell") -> list[tuple[int, int]]:
         """Return a list of (row, col) coordinates for all cells matching the given type."""
         rows, cols = np.where(self.field.cells == cell)
         return list(zip(rows, cols))
 
-    def set_wumpus(self, wumpus: 'Wumpus'):
+    def set_wumpus(self, wumpus: "Wumpus"):
         self.wumpus = wumpus
 
-    def set_firetruck(self, firetruck: 'Firetruck'):
+    def set_firetruck(self, firetruck: "Firetruck"):
         self.firetruck = firetruck
 
     def update(self) -> float:
@@ -110,16 +112,20 @@ class World:
 
     def render_spread(self):
         """Render the radius around burning cells that haven't spread yet."""
-        surface = pygame.Surface((self.display.get_width(), self.display.get_height()), pygame.SRCALPHA)
+        surface = pygame.Surface(
+            (self.display.get_width(), self.display.get_height()), pygame.SRCALPHA
+        )
 
-        for (row, col) in self.get_filtered_cells_coordinates(Cell.BURNING):
+        for row, col in self.get_filtered_cells_coordinates(Cell.BURNING):
             # Only render radius for fires that haven't spread yet
             if (row, col) not in self.field.has_spread:
                 center_x = int((col + 0.5) * self.cell_dimensions)
                 center_y = int((row + 0.5) * self.cell_dimensions)
                 radius_pixels = int(SPREAD_RADIUS * self.pixels_per_meter)
                 color = (*self.field.get_color(Cell.BURNING), 50)
-                pygame.draw.circle(surface, color, (center_x, center_y), radius_pixels, radius_pixels)
+                pygame.draw.circle(
+                    surface, color, (center_x, center_y), radius_pixels, radius_pixels
+                )
 
         self.display.blit(surface, (0, 0))
 
@@ -129,14 +135,19 @@ class World:
         WUMPUS_COLOR = (162, 32, 174)
         FIRETRUCK_COLOR = (220, 50, 50)
 
-        hud_rect = pygame.Rect(0, self.field_dimensions, self.field_dimensions, self.hud_height)
+        hud_rect = pygame.Rect(
+            0, self.field_dimensions, self.field_dimensions, self.hud_height
+        )
         pygame.draw.rect(self.display, HUD_BG_COLOR, hud_rect)
 
         # Format world time
         time_str = f"{self.world_time:4.0f}s"
 
         # Cell states tally
-        tally_str = "  ".join(f"{cell.name}: {count:<3d}" for cell, count in self.field.tally_cells().items())
+        tally_str = "  ".join(
+            f"{cell.name}: {count:<3d}"
+            for cell, count in self.field.tally_cells().items()
+        )
 
         # Scores (color-coded)
         score_str = f"WU: {self.wumpus_score:<3d} FT: {self.firetruck_score:<3d}"
@@ -146,24 +157,29 @@ class World:
         firetruck_location = self.firetruck.get_location()
         locations_str = f"WU: {wumpus_location} FT: {firetruck_location}"
 
-        text = " | ".join([s for s in [score_str, time_str, tally_str, locations_str, message] if s])
+        text = " | ".join(
+            [s for s in [score_str, time_str, tally_str, locations_str, message] if s]
+        )
 
         img = self.font.render(text, True, HUD_FONT_COLOR)
-        self.display.blit(img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding))
+        self.display.blit(
+            img, (hud_rect.x + self.hud_padding, hud_rect.y + self.hud_padding)
+        )
 
 
 @dataclass(frozen=True)
 class Pos:
     """Position in the world: x, y, heading"""
+
     x: float  # m
     y: float  # m
     heading: float  # rad, 0 is along the x-axis, CCW is positive
 
-    def distance_to(self, other: 'Pos') -> float:
+    def distance_to(self, other: "Pos") -> float:
         """Euclidean distance to another position"""
         return math.hypot(self.x - other.x, self.y - other.y)
 
-    def heading_error_to(self, other: 'Pos') -> float:
+    def heading_error_to(self, other: "Pos") -> float:
         """Heading error to another position (wrapped to [-pi, pi])"""
         error = abs(self.heading - other.heading)
         if error > math.pi:
