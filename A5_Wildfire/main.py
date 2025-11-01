@@ -35,8 +35,8 @@ rng = np.random.default_rng()
 pygame.init()
 pygame.display.set_caption("Wildfire")
 
-# SEED = 67
-SEED = 41
+SEED = 67
+# SEED = 41
 TIME_SPEED = 10.0  # Time speed coefficient
 PAR_TIME = 3600.0
 
@@ -50,6 +50,8 @@ wumpus = Wumpus(world, WUMPUS_ROWS, WUMPUS_COLS)
 firetruck = Firetruck(world, FIRETRUCK_ROWS, FIRETRUCK_COLS)
 world.wumpus = wumpus
 world.firetruck = firetruck
+
+locations = firetruck.collect_locations()
 
 running = True
 while running:
@@ -90,6 +92,7 @@ while running:
     wumpus.render()
     wumpus.set_goal_auto()
 
+    firetruck.render_locations(locations)
     firetruck.update()
     firetruck.render()  # Wumpus needs to be able to hide under the firetruck, so rendering order matters
 

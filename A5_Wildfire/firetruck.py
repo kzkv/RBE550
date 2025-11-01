@@ -1,12 +1,16 @@
 # firetruck.py
 import logging
 import math
+from scipy.ndimage import binary_dilation
+import numpy as np
 from typing import List, Tuple
 
 import pygame
 
 from world import Pos, World
 from field import Cell
+
+CONNECTOR_DENSITY = 0.1  # Fraction of empty cells to use as connectors
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +95,45 @@ class Firetruck:
         if suppressed_count > 0:
             logger.debug(f"Firetruck suppressed {suppressed_count} fire(s)")
 
+    def collect_locations(self) -> List[Tuple[int, int]]:
+        """
+        Collect all points of interest for motion planning.
+        POIs are EMPTY cells adjacent to OBSTACLE cells in the initial field and connector locations.
+        """
+        field = self.world.field
+
+        # Find empty cells adjacent to obstacles
+        obstacle_mask = field.cells == Cell.OBSTACLE
+        dilated_obstacles = binary_dilation(obstacle_mask, structure=np.ones((3, 3)))
+        empty_cells = field.cells == Cell.EMPTY
+
+        # Valid POIs: empty cells adjacent to obstacles
+        poi_mask = empty_cells & dilated_obstacles
+
+        # Extract locations as (row, col) tuples
+        poi_rows, poi_cols = np.where(poi_mask)
+        poi_locations = list(zip(poi_rows, poi_cols))
+
+        # Generate connector locations: random empty cells not already in POIs
+        # These serve as intermediate waypoints for Reeds-Shepp maneuvering
+        connector_mask = empty_cells & ~poi_mask
+        connector_rows, connector_cols = np.where(connector_mask)
+
+        if len(connector_rows) > 0:
+            # Select a random subset of empty cells as connectors
+            num_connectors = max(1, int(CONNECTOR_DENSITY * len(connector_rows)))
+            connector_indices = field.rng.choice(
+                len(connector_rows), size=num_connectors, replace=False
+            )
+            connector_locations = [
+                (connector_rows[i], connector_cols[i]) for i in connector_indices
+            ]
+        else:
+            connector_locations = []
+
+        all_locations = poi_locations + connector_locations
+        return all_locations
+
     def render(self):
         """Render vehicle at current or specified position"""
         FIRETRUCK_COLOR = (220, 50, 50)  # Red for firetruck
@@ -136,3 +179,27 @@ class Firetruck:
             for pos in route
         ]
         pygame.draw.lines(self.world.display, color, False, pts, 2)
+
+    def render_locations(self, locations: List[Tuple[int, int]]):
+        """Render location markers for debugging/visualization"""
+        cell_dim = self.world.cell_dimensions
+
+        LOCATION_COLOR = (220, 50, 50, 100)
+        CIRCLE_RADIUS = cell_dim // 2 - 4
+
+        surface = pygame.Surface(
+            (self.world.display.get_width(), self.world.display.get_height()),
+            pygame.SRCALPHA,
+        )
+
+        for row, col in locations:
+            center_x = int((col + 0.5) * cell_dim)
+            center_y = int((row + 0.5) * cell_dim)
+            pygame.draw.circle(
+                surface,
+                (LOCATION_COLOR),
+                (center_x, center_y),
+                CIRCLE_RADIUS,
+            )
+
+        self.world.display.blit(surface, (0, 0))

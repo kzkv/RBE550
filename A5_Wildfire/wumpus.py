@@ -404,13 +404,28 @@ class Wumpus:
         )
 
         top_priorities = self._cached_priorities[top_rows, top_cols]
-        p_min, p_max = top_priorities.min(), top_priorities.max()
 
-        priorities_normalized = (top_priorities - p_min) / (p_max - p_min)
+        # Filter out -inf priorities (no valid targets)
+        valid_mask = np.isfinite(top_priorities)
+        if not np.any(valid_mask):
+            return  # No valid targets to render
+
+        valid_rows = top_rows[valid_mask]
+        valid_cols = top_cols[valid_mask]
+        valid_priorities = top_priorities[valid_mask]
+
+        p_min, p_max = valid_priorities.min(), valid_priorities.max()
+
+        # Handle the case where all priorities are equal
+        if abs(p_max - p_min) < EPSILON:
+            priorities_normalized = np.ones_like(valid_priorities) * 0.5
+        else:
+            priorities_normalized = (valid_priorities - p_min) / (p_max - p_min)
+
         cell_dim = self.world.cell_dimensions
 
         # Render heatmap
-        for row, col, normalized in zip(top_rows, top_cols, priorities_normalized):
+        for row, col, normalized in zip(valid_rows, valid_cols, priorities_normalized):
             alpha = int(
                 normalized * 100
             )  # Vary alpha: high priority = opaque, low priority = transparent
