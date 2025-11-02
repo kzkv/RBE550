@@ -71,13 +71,7 @@ while running:
                 # world.field.ignite(row, col)
                 pass
             elif world.field.get_cell(row, col) == Cell.EMPTY:
-                goal_x, goal_y = world.grid_to_world(row, col)
-                goal_heading = rng.uniform(low=-math.pi, high=math.pi)
-                logger.debug(
-                    f"Setting firetruck goal to ({goal_x:04.1f}, {goal_y:04.1f}, {goal_heading:04.1f})"
-                )
-                goal_pose = Pos(goal_x, goal_y, goal_heading)
-                firetruck.set_test_goal(goal_pose)
+                pass
 
     if world.world_time >= PAR_TIME:
         # TODO: consider what parts of the rendering should be done here
@@ -87,7 +81,8 @@ while running:
     dt_world = world.update()
     world.field.update_burning_cells()
     world.clear()
-    # world.render_field()
+    world.render_field()
+    world.field.render_collision_overlay()
     # world.render_spread()
     # world.render_hud()
 
@@ -102,6 +97,6 @@ while running:
     # firetruck.render_test_path()
     # firetruck.update()
     # firetruck.render()
-    firetruck.render_roadmap()
+    # firetruck.render_roadmap()
 
     pygame.display.flip()

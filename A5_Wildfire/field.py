@@ -1,17 +1,21 @@
 # Tom Kazakov
 # RBE 550, Assignment 5, Wildfire
 
+import logging
+import math
+import pygame
 from enum import IntEnum
-from typing import Tuple, TYPE_CHECKING
-
 import numpy as np
 from scipy.ndimage import binary_dilation
-import logging
+from typing import Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world import World, Pos
 
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from world import World
+# Discretization parameter for collision checking
+COLLISION_DISCRETIZATION = 0.2  # meters per fine grid cell
 
 SPREAD_DURATION = 10.0  # s, time to spread fire after ignition
 SPREAD_RADIUS = 30.0  # m
@@ -44,6 +48,9 @@ CELL_COLORS = {
     Cell.BURNED: (150, 150, 150),
 }
 
+# Collision overlay rendering color
+COLLISION_OVERLAY_COLOR = (255, 100, 150, 50)
+
 
 class Field:
     """Game field manager"""
@@ -73,6 +80,178 @@ class Field:
         # Pre-computed spread mask
         self.spread_radius_cells = int(np.ceil(SPREAD_RADIUS / self.world.cell_size))
         self.spread_mask = self._precompute_spread_mask()
+
+        # Initialize collision checking overlay
+        self._init_collision_overlay()
+
+    def _init_collision_overlay(self):
+        """Initialize the fine-grid discretized obstacle overlay for fast collision checking."""
+        # Calculate fine grid dimensions
+        self.collision_discretization = COLLISION_DISCRETIZATION
+        self.fine_grid_size = int(
+            np.ceil(
+                self.grid_dimensions
+                * self.world.cell_size
+                / self.collision_discretization
+            )
+        )
+
+        # Discretize obstacles to fine grid
+        self.fine_obstacles = self._discretize_obstacles_fine()
+
+        # Create inflated obstacle overlay using half-diagonal of firetruck
+        # TODO: break circular dependency and use encapsulated firetruck object
+        firetruck_length = 4.9
+        firetruck_width = 2.2
+        firetruck_half_diagonal = math.hypot(firetruck_length / 2, firetruck_width / 2)
+
+        # Inflate by half-diagonal (worst-case corner distance)
+        inflation_radius = firetruck_half_diagonal
+        inflated_obstacles = self._inflate_obstacles_fine(inflation_radius)
+
+        # Create a border overlay with the same inflation radius
+        border_overlay = self._create_border_overlay(inflation_radius)
+
+        # Combine into a single collision overlay (obstacles OR borders)
+        self.collision_overlay = inflated_obstacles | border_overlay
+
+        # Pre-render overlay surface for fast rendering
+        self._overlay_surface = self._prerender_overlay_surface()
+
+    def _create_border_overlay(self, buffer_distance: float) -> np.ndarray:
+        """
+        Create an overlay marking the border zone as collision areas.
+        Marks cells within buffer_distance of the world boundaries.
+
+        Args:
+            buffer_distance: Distance in meters from world edges to mark as collision zone
+
+        Returns:
+            Boolean array marking border collision zones
+        """
+        overlay = np.zeros((self.fine_grid_size, self.fine_grid_size), dtype=bool)
+
+        # Convert buffer distance to fine grid cells
+        buffer_cells = int(np.ceil(buffer_distance / self.collision_discretization))
+
+        # Mark cells near each edge
+        overlay[:buffer_cells, :] = True  # Top edge
+        overlay[-buffer_cells:, :] = True  # Bottom edge
+        overlay[:, :buffer_cells] = True  # Left edge
+        overlay[:, -buffer_cells:] = True  # Right edge
+
+        return overlay
+
+    def _prerender_overlay_surface(self) -> pygame.Surface:
+        """Pre-render collision overlay to a pygame Surface for fast blitting."""
+        ppm = self.world.pixels_per_meter
+        ppf = self.collision_discretization * ppm  # pixels per fine cell
+        width = int(self.fine_grid_size * ppf)
+        height = int(self.fine_grid_size * ppf)
+
+        surf = pygame.Surface((width, height), pygame.SRCALPHA)
+
+        # Vectorized approach: find all collision cells at once
+        collision_rows, collision_cols = np.where(self.collision_overlay)
+
+        logger.info(
+            f"Rendering {len(collision_rows)} collision cells to overlay surface..."
+        )
+
+        # Batch render collision cells
+        ppf_int = int(ppf)
+        for row, col in zip(collision_rows, collision_cols):
+            x = int(col * ppf)
+            y = int(row * ppf)
+            rect = pygame.Rect(x, y, ppf_int, ppf_int)
+            pygame.draw.rect(surf, COLLISION_OVERLAY_COLOR, rect)
+
+        logger.info(f"Overlay surface created: {width}x{height} pixels")
+        return surf
+
+    def render_collision_overlay(self) -> None:
+        """Render the collision overlay for visualization."""
+        self.world.display.blit(self._overlay_surface, (0, 0))
+
+    def _discretize_obstacles_fine(self) -> np.ndarray:
+        """Convert coarse obstacle grid to fine-resolution grid."""
+        fine_obstacles = np.zeros(
+            (self.fine_grid_size, self.fine_grid_size), dtype=bool
+        )
+
+        # Each coarse cell corresponds to multiple fine cells
+        cells_per_coarse = int(self.world.cell_size / self.collision_discretization)
+
+        # Fill fine grid cells
+        for row in range(self.grid_dimensions):
+            for col in range(self.grid_dimensions):
+                if self.cells[row, col] == Cell.OBSTACLE:
+                    fine_row_start = row * cells_per_coarse
+                    fine_row_end = min(
+                        (row + 1) * cells_per_coarse, self.fine_grid_size
+                    )
+                    fine_col_start = col * cells_per_coarse
+                    fine_col_end = min(
+                        (col + 1) * cells_per_coarse, self.fine_grid_size
+                    )
+
+                    fine_obstacles[
+                        fine_row_start:fine_row_end, fine_col_start:fine_col_end
+                    ] = True
+
+        return fine_obstacles
+
+    @staticmethod
+    def _create_circular_kernel(radius_fine_grid_cells: int) -> np.ndarray:
+        """Create a circular structuring element for inflation."""
+        size = 2 * radius_fine_grid_cells + 1
+        kernel = np.zeros((size, size), dtype=bool)
+        center = radius_fine_grid_cells
+
+        for i in range(size):
+            for j in range(size):
+                distance_sq = (i - center) ** 2 + (j - center) ** 2
+                if distance_sq <= radius_fine_grid_cells**2:
+                    kernel[i, j] = True
+
+        return kernel
+
+    def _inflate_obstacles_fine(self, inflation_radius: float) -> np.ndarray:
+        """Inflate obstacles by the given radius using morphological dilation."""
+        # Convert radius to fine grid cells
+        inflation_cells = int(np.ceil(inflation_radius / self.collision_discretization))
+
+        kernel = self._create_circular_kernel(inflation_cells)
+        inflated = binary_dilation(self.fine_obstacles, structure=kernel)
+        return inflated
+
+    def _world_to_fine_grid(self, x: float, y: float) -> tuple[int, int]:
+        """Convert world coordinates (x, y) to (row, col) indices in the fine grid."""
+        # Convert from Cartesian (y up) to grid coordinates (y down)
+        # Match the coordinate system used in world_to_grid
+        col = int(x / self.collision_discretization)
+
+        # Flip Y: high y (Cartesian) -> low row (grid)
+        # Total world height is grid_dimensions * cell_size
+        world_height = self.grid_dimensions * self.world.cell_size
+        row = int((world_height - y) / self.collision_discretization)
+
+        return row, col
+
+    def check_collision_at_pos(self, pos: "Pos") -> bool:
+        """
+        Check if a position collides with obstacles (using inflated overlay).
+        Returns True if a collision is detected, False if clear.
+        Uses pre-computed fine-grid overlay for O(1) lookup.
+        """
+        row, col = self._world_to_fine_grid(pos.x, pos.y)
+
+        # Out of bounds check
+        in_bounds = 0 <= row < self.fine_grid_size and 0 <= col < self.fine_grid_size
+        if not in_bounds:
+            return True  # Out of bounds is treated as a collision
+
+        return self.collision_overlay[row, col]
 
     def rotate(self, shape: np.ndarray):
         return np.rot90(shape, self.rng.choice([-1, 0, 1, 2]))

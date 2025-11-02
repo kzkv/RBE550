@@ -17,7 +17,7 @@ from field import Field, Cell, SPREAD_RADIUS
 # Fundamental world constants
 GRID_DIMENSIONS = 50
 CELL_SIZE = 5.0  # 5 meters per cell
-PIXELS_PER_METER = 7
+PIXELS_PER_METER = 5
 OBSTACLE_DENSITY = 0.1
 
 
