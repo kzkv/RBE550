@@ -94,9 +94,8 @@ while running:
     # wumpus.set_goal_auto()
 
     # firetruck.render_poi_locations()
-    # firetruck.render_test_path()
     # firetruck.update()
     # firetruck.render()
-    # firetruck.render_roadmap()
+    firetruck.render_roadmap()
 
     pygame.display.flip()

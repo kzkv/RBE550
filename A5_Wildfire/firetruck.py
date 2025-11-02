@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 INITIAL_HEADING = math.pi / 2
 FIREFIGHTING_DURATION = 5.0  # Time to suppress fire after arrival or ignition
 MAX_POI_DISTANCE = 3
+NUM_HEADINGS = 8  # Headings per POI
 
 # Performance-critical constants for _integrate_path_step (called 26M+ times during roadmap building)
 # Hardcoded to avoid repeated math.pi lookups and calculations
@@ -70,13 +71,6 @@ class Firetruck:
         self.min_turning_radius = 13.0  # m
         self.max_velocity = 10.0  # m/s
 
-        # Test path for visualization
-        self.test_goal: Optional[Pos] = None
-        self.test_path: Optional[List[Pos]] = None
-        self.test_path_segments: Optional[List[PathSegment]] = (
-            None  # Track direction info
-        )
-
         # Generate points of interest for motion planning
         self.poi_locations = self._collect_poi_locations(origin=initial_location)
         self.poi_poses = self._collect_poi_poses()
@@ -99,32 +93,6 @@ class Firetruck:
         # Reset presence timer if moved to a new cell
         if old_location != self.location:
             self.location_arrival = self.world.world_time
-
-    def set_test_goal(self, goal: Pos):
-        """Set a test goal and generate a Reeds-Shepp path for visualization"""
-        self.test_goal = goal
-        STEP_SIZE = 0.3  # meters between sampled waypoints
-
-        try:
-            # Generate the Reeds-Shepp path with direction information
-            result = self._compute_reeds_shepp_path(
-                start=self.pos,
-                goal=goal,
-                turning_radius=self.min_turning_radius,
-                step_size=STEP_SIZE,
-            )
-
-            if result:
-                self.test_path, self.test_path_segments = result
-                logger.info(f"Generated RS path with {len(self.test_path)} waypoints")
-            else:
-                self.test_path = None
-                self.test_path_segments = None
-                logger.warning("No valid Reeds-Shepp path found")
-        except Exception as e:
-            self.test_path = None
-            self.test_path_segments = None
-            logger.error(f"Error generating Reeds-Shepp path: {e}")
 
     def _compute_reeds_shepp_path(
         self,
@@ -172,17 +140,16 @@ class Firetruck:
         start: Pos,
         turning_radius: float,
         step_size: float,
-    ) -> Tuple[List[Pos], List[PathSegment]]:
-        """Sample a Reeds-Shepp path at regular intervals."""
+    ) -> Optional[Tuple[List[Pos], List[PathSegment]]]:
+        """Sample a Reeds-Shepp path at regular intervals, with early collision detection.
+        Returns None if collision is detected, otherwise returns (waypoints, segments).
+        """
 
         waypoints = [start]
         segments = []
 
         # Current state as we integrate along the path
         current_pos = start
-
-        # Pre-compute to avoid repeated attribute lookups
-        integrate = self._integrate_path_step
 
         for element in path_elements:
             # Calculate segment length and number of samples
@@ -199,13 +166,19 @@ class Firetruck:
             # Sample this segment
             for _ in range(num_samples):
                 prev_pos = current_pos
-                current_pos = integrate(
+                current_pos = self._integrate_path_step(
                     pos=current_pos,
                     step_length=step_length,
                     turning_radius=turning_radius,
                     steering=elem_steering,
                     gear=elem_gear,
                 )
+
+                # Early collision check using the inflated overlay
+                # This checks: obstacles (inflated) + borders (inflated) + out-of-bounds
+                if self.world.field.check_collision_at_pos(current_pos):
+                    return None
+
                 waypoints.append(current_pos)
                 segments.append(PathSegment(prev_pos, current_pos, is_forward))
 
@@ -239,7 +212,9 @@ class Firetruck:
             steering_val = steering.value
 
             # Angular change for this step
-            delta_heading = -(step_length / turning_radius) * steering_val * gear_val
+            delta_heading = (
+                -(step_length / turning_radius) * steering_val * gear_val
+            )  # noqa
 
             # Compute the center of the arc using hardcoded HALF_PI constant
             center_angle = heading + HALF_PI * (-steering_val)
@@ -345,8 +320,6 @@ class Firetruck:
         return all_locations
 
     def _collect_poi_poses(self):
-        NUM_HEADINGS = 1
-        # TODO: adjust the headings number back to 8
         headings = [i * (2 * math.pi / NUM_HEADINGS) for i in range(NUM_HEADINGS)]
 
         # Create Pos nodes
@@ -374,8 +347,6 @@ class Firetruck:
         - Nodes are Pos (x, y, heading)
         - Edges contain path waypoints, segments, and cost
         """
-        import networkx as nx
-
         start_time = time.time()
         logger.info(f"Building roadmap with {len(self.poi_poses)} poses...")
 
@@ -411,7 +382,7 @@ class Firetruck:
 
                 # Try connecting to each heading at this location
                 for goal_pose in goal_poses:
-                    # Generate Reeds-Shepp path
+                    # Generate Reeds-Shepp path with collision checking during sampling
                     result = self._compute_reeds_shepp_path(
                         start=start_pose,
                         goal=goal_pose,
@@ -420,15 +391,10 @@ class Firetruck:
                     )
 
                     if not result:
+                        collision_count += 1
                         continue
 
                     waypoints, segments = result
-
-                    # TODO: collision checks
-                    # Quick collision check
-                    # if self._check_path_collision(waypoints):
-                    #     collision_count += 1
-                    #     continue
 
                     # Compute path cost (total path length)
                     path_length = sum(
@@ -507,48 +473,6 @@ class Firetruck:
 
         pts = [self.world.world_to_pixel(pos.x, pos.y) for pos in route]
         pygame.draw.lines(self.world.display, color, False, pts, 2)
-
-    def render_test_path(self):
-        """Render the test Reeds-Shepp path if one exists"""
-        if self.test_path is None or len(self.test_path) < 2:
-            return
-
-        FORWARD_COLOR = (0, 200, 255)  # Cyan for forward
-        REVERSE_COLOR = (255, 100, 0)  # Orange for reverse
-        GOAL_COLOR = (0, 255, 0)  # Green
-
-        # Draw path segments with different colors for forward/reverse
-        if self.test_path_segments:
-            for segment in self.test_path_segments:
-                color = FORWARD_COLOR if segment.is_forward else REVERSE_COLOR
-                start_px, start_py = self.world.world_to_pixel(
-                    segment.start.x, segment.start.y
-                )
-                end_px, end_py = self.world.world_to_pixel(segment.end.x, segment.end.y)
-                pygame.draw.line(
-                    self.world.display, color, (start_px, start_py), (end_px, end_py), 2
-                )
-        else:
-            # Fallback: draw the entire path in cyan if segment info not available
-            self.render_route(self.test_path, FORWARD_COLOR)
-
-        # Draw goal pose indicator
-        if self.test_goal:
-            goal_px, goal_py = self.world.world_to_pixel(
-                self.test_goal.x, self.test_goal.y
-            )
-
-            # Draw circle at goal
-            pygame.draw.circle(self.world.display, GOAL_COLOR, (goal_px, goal_py), 8, 2)
-
-            # Draw heading indicator
-            # Negate heading for pygame's coordinate system
-            arrow_len = 15
-            end_x = goal_px + int(arrow_len * math.cos(-self.test_goal.heading))
-            end_y = goal_py + int(arrow_len * math.sin(-self.test_goal.heading))
-            pygame.draw.line(
-                self.world.display, GOAL_COLOR, (goal_px, goal_py), (end_x, end_y), 2
-            )
 
     def render_poi_locations(self):
         """Render POI location markers"""
