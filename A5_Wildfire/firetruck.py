@@ -27,11 +27,9 @@ FIREFIGHTING_DURATION = 5.0  # Time to suppress fire after arrival or ignition
 MAX_POI_DISTANCE = 5
 NUM_HEADINGS = 8  # Headings per POI
 
-COVERAGE_RADIUS = (
-    2.0  # Cell distance where the truck is effective (10 meters / 5 meters per cell)
-)
-REDUNDANCY_THRESHOLD = 4  # Add redundant POI if covering this many obstacles
-MIN_REDUNDANCY_COUNT = 2  # Target at least 2 POIs per dense area
+COVERAGE_RADIUS_METERS = 10.0  # meters
+MAX_POI_COUNT = 200  # Maximum number of POIs to select
+POI_EXCLUSION_RADIUS_FINE = 50  # Fine cells - avoid clustering POIs too closely
 
 # Performance-critical constants for _integrate_path_step (called 26M+ times during roadmap building)
 # Hardcoded to avoid repeated math.pi lookups and calculations
@@ -41,7 +39,7 @@ PI = 3.141592653589793  # math.pi
 
 """
 Reeds-Shepp path segments are generated from cell center to cell center. This introduces a discrepancy, 
-as an Ackermann steering pivots the car about the rear axle. The discrepaancy will be corrected by a path follower.
+as an Ackermann steering pivots the car about the rear axle. The discrepancy will be corrected by a path follower.
 """
 
 
@@ -87,7 +85,7 @@ class Firetruck:
         self.poi_poses = self._collect_poi_poses()
 
         # Build location-indexed dictionary for O(1) lookup
-        # This is a substantial speed-up for the A* path finding
+        # This is a significant speed-up for the A* path finding
         self.poses_by_location = {}
         for pose in self.poi_poses:
             loc = pose.location
@@ -303,153 +301,106 @@ class Firetruck:
 
     def _collect_poi_locations(self, origin: Tuple[int, int]) -> List[Tuple[int, int]]:
         """
-        Collect points of interest for motion planning.
-        POIs are EMPTY cells positioned to cover obstacles within 10m (2-cell Euclidean radius).
-        Uses a greedy coverage algorithm to minimize the number of POIs while maximizing obstacle coverage.
-        Then adds redundant POIs in high-density obstacle areas for strategic flexibility.
+        Collect points of interest for motion planning using a fine-grid coverage heatmap.
+        POIs are selected from passable fine-grid cells that cover the most obstacles,
+        with an exclusion radius to avoid clustering.
+        Continues until MAX_POI_COUNT unique POIs are collected.
 
-        Returns a list of locations (row, col) for POIs and origin
+        Returns a list of fine-grid locations (row, col) for POIs
         """
         field = self.world.field
 
-        # Find all obstacles that need coverage
-        obstacle_mask = field.cells == Cell.OBSTACLE
-        obstacle_positions = set(zip(*np.where(obstacle_mask)))
+        # Get coverage heatmap from the field (fine grid resolution)
+        heatmap = field.compute_poi_coverage_heatmap(COVERAGE_RADIUS_METERS)
 
-        # Find all empty cells as potential POIs
-        empty_cells = field.cells == Cell.EMPTY
-        empty_positions = list(zip(*np.where(empty_cells)))
+        # Create a working copy for exclusion zones
+        heatmap_working = heatmap.copy()
 
-        # For each empty cell, calculate which obstacles it can cover (within 10m = 2 cells Euclidean)
-        potential_pois = {}  # {(row, col): set of obstacles covered}
+        selected_fine_pois = []  # List of (fine_row, fine_col) tuples
 
-        for empty_row, empty_col in empty_positions:
-            covered = set()
-            for obs_row, obs_col in obstacle_positions:
-                # Euclidean distance between cell centers
-                distance = math.sqrt(
-                    (empty_row - obs_row) ** 2 + (empty_col - obs_col) ** 2
-                )
-                if distance <= COVERAGE_RADIUS:
-                    covered.add((obs_row, obs_col))
+        # Greedy selection: iteratively pick the best remaining position
+        iterations = 0
+        max_iterations = MAX_POI_COUNT * 10  # Safety limit to prevent infinite loops
 
-            if covered:  # Only consider cells that cover at least one obstacle
-                potential_pois[(empty_row, empty_col)] = covered
+        while len(selected_fine_pois) < MAX_POI_COUNT and iterations < max_iterations:
+            iterations += 1
 
-        # Phase 1: Greedy set cover for basic coverage
-        selected_pois = []
-        uncovered_obstacles = obstacle_positions.copy()
+            # Find the cell with maximum coverage
+            max_coverage = heatmap_working.max()
 
-        # Keep track of coverage count for each obstacle
-        obstacle_coverage_count = {obs: 0 for obs in obstacle_positions}
+            if max_coverage == 0:
+                break  # No more viable POIs
 
-        while uncovered_obstacles and potential_pois:
-            # Find the POI that covers the most uncovered obstacles
-            best_poi = None
-            best_coverage = set()
-            best_count = 0
+            # Get all cells with max coverage
+            max_indices = np.argwhere(heatmap_working == max_coverage)
 
-            for poi, covered in potential_pois.items():
-                newly_covered = covered & uncovered_obstacles
-                if len(newly_covered) > best_count:
-                    best_poi = poi
-                    best_coverage = newly_covered
-                    best_count = len(newly_covered)
-
-            if best_poi is None:
+            if len(max_indices) == 0:
                 break
 
-            # Add the best POI to the selected list
-            selected_pois.append(best_poi)
-            uncovered_obstacles -= best_coverage
+            # Pick the first one
+            fine_row, fine_col = max_indices[0]
+            selected_fine_pois.append((fine_row, fine_col))
 
-            # Update coverage counts
-            for obs in potential_pois[best_poi]:
-                obstacle_coverage_count[obs] += 1
+            # Apply an exclusion zone around this POI (in fine grid)
+            for dr in range(-POI_EXCLUSION_RADIUS_FINE, POI_EXCLUSION_RADIUS_FINE + 1):
+                for dc in range(
+                    -POI_EXCLUSION_RADIUS_FINE, POI_EXCLUSION_RADIUS_FINE + 1
+                ):
+                    excl_row = fine_row + dr
+                    excl_col = fine_col + dc
 
-            # Remove the selected POI from candidates
-            del potential_pois[best_poi]
+                    # Check bounds and Euclidean distance
+                    if (
+                        0 <= excl_row < field.fine_grid_size
+                        and 0 <= excl_col < field.fine_grid_size
+                    ):
+                        distance = np.sqrt(dr * dr + dc * dc)
+                        if distance <= POI_EXCLUSION_RADIUS_FINE:
+                            heatmap_working[excl_row, excl_col] = 0
 
         logger.info(
-            f"Phase 1: Selected {len(selected_pois)} POIs covering "
-            f"{len(obstacle_positions) - len(uncovered_obstacles)}/{len(obstacle_positions)} obstacles"
+            f"Selected {len(selected_fine_pois)} fine-grid POIs after {iterations} iterations"
         )
 
-        # Phase 2: Add redundant coverage in high-density areas
-        # Find areas with many obstacles but low redundancy
+        # Convert fine-grid origin to fine-grid coordinates if provided
+        if origin is not None:
+            cells_per_coarse = int(
+                field.world.cell_size / field.collision_discretization
+            )
+            origin_fine_row = origin[0] * cells_per_coarse + cells_per_coarse // 2
+            origin_fine_col = origin[1] * cells_per_coarse + cells_per_coarse // 2
+            origin_fine = (origin_fine_row, origin_fine_col)
 
-        # Rebuild potential_pois with remaining candidates
-        remaining_candidates = [
-            (poi, covered)
-            for poi, covered in [
-                (p, potential_pois.get(p))
-                for p in empty_positions
-                if p not in selected_pois
-            ]
-            if covered is not None
-        ]
-
-        # Sort candidates by number of obstacles they cover (descending)
-        remaining_candidates.sort(key=lambda x: len(x[1]), reverse=True)
-
-        redundant_pois_added = 0
-        for poi, covered in remaining_candidates:
-            # Check if this POI covers a dense area with insufficient redundancy
-            if len(covered) >= REDUNDANCY_THRESHOLD:
-                # Count how many of these obstacles already have sufficient coverage
-                low_redundancy_obstacles = sum(
-                    1
-                    for obs in covered
-                    if obstacle_coverage_count.get(obs, 0) < MIN_REDUNDANCY_COUNT
+            # Add origin if not already covered by a nearby POI
+            if origin_fine not in selected_fine_pois:
+                selected_fine_pois.append(origin_fine)
+                logger.info(
+                    f"Added origin {origin} (fine grid: {origin_fine}) to POI list"
                 )
 
-                # If many obstacles in this cluster need more coverage, add this POI
-                if low_redundancy_obstacles >= REDUNDANCY_THRESHOLD * 0.5:
-                    selected_pois.append(poi)
-                    redundant_pois_added += 1
+        logger.info(f"Final POI count: {len(selected_fine_pois)} fine-grid locations")
 
-                    # Update coverage counts
-                    for obs in covered:
-                        obstacle_coverage_count[obs] += 1
-
-        logger.info(
-            f"Phase 2: Added {redundant_pois_added} redundant POIs for dense obstacle areas"
-        )
-
-        # Always include the origin
-        if origin not in selected_pois:
-            selected_pois.append(origin)
-
-        # Calculate final coverage statistics
-        avg_coverage = (
-            sum(obstacle_coverage_count.values()) / len(obstacle_coverage_count)
-            if obstacle_coverage_count
-            else 0
-        )
-        max_coverage = (
-            max(obstacle_coverage_count.values()) if obstacle_coverage_count else 0
-        )
-
-        logger.info(
-            f"Total: {len(selected_pois)} POIs | "
-            f"Avg coverage per obstacle: {avg_coverage:.2f} | "
-            f"Max coverage: {max_coverage}"
-        )
-
-        if uncovered_obstacles:
-            logger.warning(f"{len(uncovered_obstacles)} obstacles have no POI coverage")
-
-        return selected_pois
+        return selected_fine_pois
 
     def _collect_poi_poses(self):
+        """Generate poses with multiple headings for each fine-grid POI location"""
         headings = [i * (2 * math.pi / NUM_HEADINGS) for i in range(NUM_HEADINGS)]
 
         # Create Pos nodes with location information
         poses = []
-        for row, col in self.poi_locations:
-            x, y = self.world.grid_to_world(row, col)
+        field = self.world.field
+
+        for fine_row, fine_col in self.poi_locations:
+            # Convert fine-grid to world coordinates
+            x = (fine_col + 0.5) * field.collision_discretization
+            y = (
+                field.grid_dimensions * field.world.cell_size
+                - (fine_row + 0.5) * field.collision_discretization
+            )
+
             for heading in headings:
-                poses.append(Pos(x, y, heading, location=(row, col)))
+                poses.append(Pos(x, y, heading, location=(fine_row, fine_col)))
+
         return poses
 
     @staticmethod
@@ -718,7 +669,7 @@ class Firetruck:
         closest_pose = None
 
         for roadmap_pose in self.roadmap.nodes():
-            # Calculate distance (position + heading difference)
+            # Calculate distance (position and heading difference)
             position_dist = pos.distance_to(roadmap_pose)
             heading_diff = pos.heading_error_to(roadmap_pose)
 
@@ -779,52 +730,6 @@ class Firetruck:
 
         pts = [self.world.world_to_pixel(pos.x, pos.y) for pos in route]
         pygame.draw.lines(self.world.display, color, False, pts, 2)
-
-    def render_poi_locations(self):
-        """Render POI location markers with circular coverage area outlines"""
-        cell_dim = self.world.cell_dimensions
-        LOCATION_COLOR = (100, 150, 255, 150)  # Light blue (water color)
-        COVERAGE_FILL_COLOR = (100, 150, 255, 40)  # Light blue fill for coverage
-        CIRCLE_RADIUS = cell_dim // 2 - 4
-
-        surface = pygame.Surface(
-            (self.world.display.get_width(), self.world.display.get_height()),
-            pygame.SRCALPHA,
-        )
-
-        for row, col in self.poi_locations:
-            # Draw coverage area as filled blue squares (cells within 10m = 2-cell Euclidean radius)
-            for dr in range(-2, 3):  # Check ±2 cells
-                for dc in range(-2, 3):
-                    covered_row = row + dr
-                    covered_col = col + dc
-
-                    # Check if within bounds
-                    if not self.world.field.in_bounds(covered_row, covered_col):
-                        continue
-
-                    # Check if within Euclidean distance (circular coverage)
-                    distance = math.sqrt(dr * dr + dc * dc)
-                    if distance <= COVERAGE_RADIUS:
-                        # Draw filled cell
-                        x = covered_col * cell_dim
-                        y = covered_row * cell_dim
-                        rect = pygame.Rect(x, y, cell_dim, cell_dim)
-                        pygame.draw.rect(
-                            surface, COVERAGE_FILL_COLOR, rect, 0
-                        )  # 0 = filled
-
-            # Draw POI center marker on top
-            center_x = int((col + 0.5) * cell_dim)
-            center_y = int((row + 0.5) * cell_dim)
-            pygame.draw.circle(
-                surface,
-                LOCATION_COLOR,
-                (center_x, center_y),
-                CIRCLE_RADIUS,
-            )
-
-        self.world.display.blit(surface, (0, 0))
 
     def _create_roadmap_surface(self) -> pygame.Surface:
         """
@@ -893,7 +798,7 @@ class Firetruck:
         current_points = []
 
         for segment in self.planned_path_segments:
-            # Start a new group if direction changes
+            # Start a new group if a direction changes
             if segment.is_forward != current_direction:
                 # Draw the previous group
                 if len(current_points) >= 2:
@@ -902,13 +807,13 @@ class Firetruck:
                         self.world.display, color, False, current_points, LINE_WIDTH
                     )
 
-                # Start new group
+                # Start a new group
                 current_direction = segment.is_forward
                 current_points = [
                     self.world.world_to_pixel(segment.start.x, segment.start.y)
                 ]
 
-            # Add end point to current group
+            # Add an end point to the current group
             current_points.append(
                 self.world.world_to_pixel(segment.end.x, segment.end.y)
             )
@@ -920,41 +825,85 @@ class Firetruck:
                 self.world.display, color, False, current_points, LINE_WIDTH
             )
 
-    def render_coverage_radius(self):
-        """Render the 10m (2-cell) coverage radius around the firetruck when stationary"""
-        # Only show radius when the truck has no planned path (is at rest)
-        if self.planned_path_segments:
-            return
+    def _render_coverage_circles(
+        self, locations: List[Tuple[int, int]], draw_center_markers: bool = False
+    ) -> None:
+        """
+        Render 10 m coverage circles around the given fine-grid locations.
 
-        cell_dim = self.world.cell_dimensions
+        Args:
+            locations: List of (fine_row, fine_col) tuples to draw circles around
+            draw_center_markers: If True, draw a small marker at each location center
+        """
         COVERAGE_FILL_COLOR = (100, 150, 255, 40)  # Light blue fill
+        MARKER_COLOR = (100, 150, 255, 150)  # Light blue marker
+        COVERAGE_RADIUS_PIXELS = int(
+            COVERAGE_RADIUS_METERS * self.world.pixels_per_meter
+        )
+        MARKER_RADIUS = 3  # Small marker for fine-grid precision
 
-        surface = pygame.Surface(
+        field = self.world.field
+
+        # Create separate surfaces for circles and markers
+        circle_surface = pygame.Surface(
             (self.world.display.get_width(), self.world.display.get_height()),
             pygame.SRCALPHA,
         )
 
+        marker_surface = pygame.Surface(
+            (self.world.display.get_width(), self.world.display.get_height()),
+            pygame.SRCALPHA,
+        )
+
+        for fine_row, fine_col in locations:
+            # Convert fine-grid to world coordinates
+            x = (fine_col + 0.5) * field.collision_discretization
+            y = (
+                field.grid_dimensions * field.world.cell_size
+                - (fine_row + 0.5) * field.collision_discretization
+            )
+
+            # Convert world to pixel coordinates
+            center_px, center_py = self.world.world_to_pixel(x, y)
+
+            # Draw a coverage circle on circle surface
+            pygame.draw.circle(
+                circle_surface,
+                COVERAGE_FILL_COLOR,
+                (center_px, center_py),
+                COVERAGE_RADIUS_PIXELS,
+            )
+
+            # Draw center marker on marker surface (rendered on top)
+            if draw_center_markers:
+                pygame.draw.circle(
+                    marker_surface,
+                    MARKER_COLOR,
+                    (center_px, center_py),
+                    MARKER_RADIUS,
+                )
+
+        # Blit circles first, then markers on top
+        self.world.display.blit(circle_surface, (0, 0))
+        if draw_center_markers:
+            self.world.display.blit(marker_surface, (0, 0))
+
+    def render_coverage_radius(self):
+        """Render the 10 m coverage radius around the firetruck when stationary"""
+        # Only show radius when the truck has no planned path (is at rest)
+        if self.planned_path_segments:
+            return
+
+        # Convert truck's coarse-grid location to fine-grid
+        field = self.world.field
+        cells_per_coarse = int(field.world.cell_size / field.collision_discretization)
         truck_row, truck_col = self.get_location()
+        truck_fine_row = truck_row * cells_per_coarse + cells_per_coarse // 2
+        truck_fine_col = truck_col * cells_per_coarse + cells_per_coarse // 2
 
-        # Draw coverage area as filled blue squares (cells within 10m = 2-cell Euclidean radius)
-        for dr in range(-2, 3):  # Check ±2 cells
-            for dc in range(-2, 3):
-                covered_row = truck_row + dr
-                covered_col = truck_col + dc
+        truck_fine_location = [(truck_fine_row, truck_fine_col)]
+        self._render_coverage_circles(truck_fine_location, draw_center_markers=False)
 
-                # Check if within bounds
-                if not self.world.field.in_bounds(covered_row, covered_col):
-                    continue
-
-                # Check if within Euclidean distance (circular coverage)
-                distance = math.sqrt(dr * dr + dc * dc)
-                if distance <= COVERAGE_RADIUS:
-                    # Draw filled cell
-                    x = covered_col * cell_dim
-                    y = covered_row * cell_dim
-                    rect = pygame.Rect(x, y, cell_dim, cell_dim)
-                    pygame.draw.rect(
-                        surface, COVERAGE_FILL_COLOR, rect, 0
-                    )  # 0 = filled
-
-        self.world.display.blit(surface, (0, 0))
+    def render_poi_locations(self):
+        """Render POI location markers with 10 m coverage circles"""
+        self._render_coverage_circles(self.poi_locations, draw_center_markers=True)

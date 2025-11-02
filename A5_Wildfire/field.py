@@ -20,6 +20,7 @@ COLLISION_DISCRETIZATION = 0.2  # meters per fine grid cell
 SPREAD_DURATION = 10.0  # s, time to spread fire after ignition
 SPREAD_RADIUS = 30.0  # m
 BURNOUT_DURATION = 30.0  # s, time to burn out after ignition
+FIRETRUCK_COVERAGE_RADIUS = 10.0  # m
 
 """
 Fire propagation logic:
@@ -507,3 +508,71 @@ class Field:
             }
         )
         return tally
+
+    def compute_poi_coverage_heatmap(self, coverage_radius_meters: float) -> np.ndarray:
+        """
+        Compute a fine-grid heatmap where each passable cell's value represents
+        how many obstacles it can cover within the given radius.
+
+        Args:
+            coverage_radius_meters: Coverage radius in meters (e.g., 10 m for firetruck)
+
+        Returns:
+            Fine-grid array where each cell value = the number of obstacles coverable from that position
+        """
+        logger.info(
+            f"Computing POI coverage heatmap with {coverage_radius_meters}m radius..."
+        )
+
+        # Initialize heatmap (fine grid resolution)
+        heatmap = np.zeros((self.fine_grid_size, self.fine_grid_size), dtype=np.int32)
+
+        # Convert coverage radius to fine grid cells
+        coverage_radius_fine = int(
+            np.floor(coverage_radius_meters / self.collision_discretization)
+        )
+
+        # Create circular kernel for coverage area
+        kernel = self._create_circular_kernel(coverage_radius_fine)
+
+        # For each obstacle cell in the coarse grid, inflate it on the fine grid
+        cells_per_coarse = int(self.world.cell_size / self.collision_discretization)
+
+        obstacle_rows, obstacle_cols = np.where(self.cells == Cell.OBSTACLE)
+
+        for obs_row, obs_col in zip(obstacle_rows, obstacle_cols):
+            # Convert an obstacle cell to a fine grid center
+            fine_row_center = obs_row * cells_per_coarse + cells_per_coarse // 2
+            fine_col_center = obs_col * cells_per_coarse + cells_per_coarse // 2
+
+            # Apply kernel centered at this obstacle (increment all reachable fine cells)
+            kernel_radius = coverage_radius_fine
+            row_start = max(0, fine_row_center - kernel_radius)
+            row_end = min(self.fine_grid_size, fine_row_center + kernel_radius + 1)
+            col_start = max(0, fine_col_center - kernel_radius)
+            col_end = min(self.fine_grid_size, fine_col_center + kernel_radius + 1)
+
+            # Extract the valid portion of the kernel
+            kernel_row_start = kernel_radius - (fine_row_center - row_start)
+            kernel_row_end = kernel_row_start + (row_end - row_start)
+            kernel_col_start = kernel_radius - (fine_col_center - col_start)
+            kernel_col_end = kernel_col_start + (col_end - col_start)
+
+            kernel_slice = kernel[
+                kernel_row_start:kernel_row_end, kernel_col_start:kernel_col_end
+            ]
+
+            # Increment heatmap where kernel is True
+            heatmap[row_start:row_end, col_start:col_end] += kernel_slice.astype(
+                np.int32
+            )
+
+        # Mask out impassable areas (collision overlay)
+        heatmap[self.collision_overlay] = 0
+
+        logger.info(
+            f"Heatmap computed: max coverage = {heatmap.max()}, "
+            f"passable cells = {np.count_nonzero(heatmap)}"
+        )
+
+        return heatmap
