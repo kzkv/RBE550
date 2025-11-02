@@ -17,6 +17,7 @@ import reeds_shepp as rs
 import networkx as nx
 
 CONNECTOR_DENSITY = 0.1  # Fraction of empty cells to use as connectors
+MAX_PATH_SEARCH_LENGTH = 100.0  # Maximum path length to consider (meters)
 
 FORCE_REBUILD_ROADMAP = False  # Set to True to force roadmap rebuild
 
@@ -35,7 +36,7 @@ PI = 3.141592653589793  # math.pi
 
 """
 Reeds-Shepp path segments are generated from cell center to cell center. This introduces a discrepancy, 
-as an Ackermann steering pivots the car about the rear axle. The discrepancy will be corrected by a path follower.
+as an Ackermann steering pivots the car about the rear axle. The discrepaancy will be corrected by a path follower.
 """
 
 
@@ -79,6 +80,15 @@ class Firetruck:
         # Generate points of interest for motion planning
         self.poi_locations = self._collect_poi_locations(origin=initial_location)
         self.poi_poses = self._collect_poi_poses()
+
+        # Build location-indexed dictionary for O(1) lookup
+        # This is a substantial speed-up for the A* path finding
+        self.poses_by_location = {}
+        for pose in self.poi_poses:
+            loc = pose.location
+            if loc not in self.poses_by_location:
+                self.poses_by_location[loc] = []
+            self.poses_by_location[loc].append(pose)
 
         # Build roadmap (with caching)
         self.roadmap = self._load_or_build_roadmap()
@@ -333,12 +343,12 @@ class Firetruck:
     def _collect_poi_poses(self):
         headings = [i * (2 * math.pi / NUM_HEADINGS) for i in range(NUM_HEADINGS)]
 
-        # Create Pos nodes
+        # Create Pos nodes with location information
         poses = []
         for row, col in self.poi_locations:
             x, y = self.world.grid_to_world(row, col)
             for heading in headings:
-                poses.append(Pos(x, y, heading))
+                poses.append(Pos(x, y, heading, location=(row, col)))
         return poses
 
     @staticmethod
@@ -523,6 +533,7 @@ class Firetruck:
     def plan_path_to_location(self, target_location: tuple[int, int]) -> bool:
         """
         Plan a path from the current pose to a target grid location using the roadmap.
+        Finds the shortest path across all possible goal headings.
         Returns True if a valid path was found, False otherwise.
         """
         if not self.roadmap:
@@ -537,19 +548,19 @@ class Firetruck:
             )
             return False
 
-        # Find all goal poses at the target location
-        target_x, target_y = self.world.grid_to_world(*target_location)
-        goal_poses = [
-            pose
-            for pose in self.poi_poses
-            if abs(pose.x - target_x) < 0.1 and abs(pose.y - target_y) < 0.1
-        ]
+        # O(1) lookup of all goal poses at the target location
+        goal_poses = self.poses_by_location.get(target_location, [])
 
         if not goal_poses:
             logger.warning(f"Target location {target_location} is not in the roadmap")
             return False
 
-        # Try to find a path to any of the goal poses
+        # Heuristic for A*: Euclidean distance between poses
+        def length_heuristic(node_a, node_b):
+            """Euclidean distance heuristic for A* in the roadmap"""
+            return node_a.distance_to(node_b)
+
+        # Try to find paths to ALL goal poses and pick the shortest
         best_path = None
         best_length = float("inf")
 
@@ -557,19 +568,24 @@ class Firetruck:
             try:
                 # Use A* to find the shortest path in the roadmap
                 path = nx.astar_path(
-                    self.roadmap, source=start_pose, target=goal_pose, weight="weight"
+                    self.roadmap,
+                    source=start_pose,
+                    target=goal_pose,
+                    heuristic=length_heuristic,
+                    weight="weight",
+                    cutoff=MAX_PATH_SEARCH_LENGTH,
                 )
 
-                if path:
-                    # Calculate total path length
-                    path_length = sum(
-                        self.roadmap[path[i]][path[i + 1]]["weight"]
-                        for i in range(len(path) - 1)
-                    )
+                # Calculate total path length
+                path_length = sum(
+                    self.roadmap[path[i]][path[i + 1]]["weight"]
+                    for i in range(len(path) - 1)
+                )
 
-                    if path_length < best_length:
-                        best_length = path_length
-                        best_path = path
+                # Keep track of the shortest path found
+                if path_length < best_length:
+                    best_length = path_length
+                    best_path = path
 
             except nx.NetworkXNoPath:
                 continue
@@ -578,7 +594,7 @@ class Firetruck:
             logger.warning(f"No path found to {target_location}")
             return False
 
-        # Extract segments from the path
+        # Extract segments from the best path
         self.planned_path_segments = []
         for i in range(len(best_path) - 1):
             edge_data = self.roadmap[best_path[i]][best_path[i + 1]]
