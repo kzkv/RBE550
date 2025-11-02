@@ -87,9 +87,9 @@ while running:
     dt_world = world.update()
     world.field.update_burning_cells()
     world.clear()
-    world.render_field()
-    world.render_spread()
-    world.render_hud()
+    # world.render_field()
+    # world.render_spread()
+    # world.render_hud()
 
     # wumpus.update()
     # wumpus.render_priority_heatmap()
@@ -99,9 +99,9 @@ while running:
     # wumpus.set_goal_auto()
 
     # firetruck.render_poi_locations()
-    firetruck.render_test_path()
-    firetruck.update()
-    firetruck.render()
+    # firetruck.render_test_path()
+    # firetruck.update()
+    # firetruck.render()
     firetruck.render_roadmap()
 
     pygame.display.flip()

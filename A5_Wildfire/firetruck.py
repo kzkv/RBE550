@@ -1,5 +1,6 @@
 import logging
 import math
+import time
 from scipy.ndimage import binary_dilation
 import numpy as np
 from typing import List, Tuple, Optional
@@ -19,6 +20,12 @@ logger = logging.getLogger(__name__)
 INITIAL_HEADING = math.pi / 2
 FIREFIGHTING_DURATION = 5.0  # Time to suppress fire after arrival or ignition
 MAX_POI_DISTANCE = 3
+
+# Performance-critical constants for _integrate_path_step (called 26M+ times during roadmap building)
+# Hardcoded to avoid repeated math.pi lookups and calculations
+HALF_PI = 1.5707963267948966  # math.pi / 2
+TWO_PI = 6.283185307179586  # 2 * math.pi
+PI = 3.141592653589793  # math.pi
 
 """
 Reeds-Shepp path segments are generated from cell center to cell center. This introduces a discrepancy, 
@@ -168,11 +175,14 @@ class Firetruck:
     ) -> Tuple[List[Pos], List[PathSegment]]:
         """Sample a Reeds-Shepp path at regular intervals."""
 
-        waypoints = [start]  # Start with the initial pose
+        waypoints = [start]
         segments = []
 
         # Current state as we integrate along the path
         current_pos = start
+
+        # Pre-compute to avoid repeated attribute lookups
+        integrate = self._integrate_path_step
 
         for element in path_elements:
             # Calculate segment length and number of samples
@@ -182,15 +192,19 @@ class Firetruck:
 
             is_forward = element.gear == rs.Gear.FORWARD
 
+            # Cache element properties
+            elem_steering = element.steering
+            elem_gear = element.gear
+
             # Sample this segment
             for _ in range(num_samples):
                 prev_pos = current_pos
-                current_pos = self._integrate_path_step(
+                current_pos = integrate(
                     pos=current_pos,
                     step_length=step_length,
                     turning_radius=turning_radius,
-                    steering=element.steering,
-                    gear=element.gear,
+                    steering=elem_steering,
+                    gear=elem_gear,
                 )
                 waypoints.append(current_pos)
                 segments.append(PathSegment(prev_pos, current_pos, is_forward))
@@ -209,38 +223,41 @@ class Firetruck:
 
         x, y, heading = pos.x, pos.y, pos.heading
 
+        # Pre-compute gear value (avoid attribute lookup in tight loop)
+        gear_val = gear.value
+
         if steering == rs.Steering.STRAIGHT:
             # Straight line motion
-            dx = step_length * gear.value * math.cos(heading)
-            dy = step_length * gear.value * math.sin(heading)
+            step_gear = step_length * gear_val
+            dx = step_gear * math.cos(heading)
+            dy = step_gear * math.sin(heading)
             return Pos(x + dx, y + dy, heading)
 
         else:
-            # Circular arc motion; library interface:
-            #   steering: LEFT=-1 (CCW), RIGHT=1 (CW)
-            #   gear: FORWARD=1, BACKWARD=-1
+            # Circular arc motion
+            # Pre-compute steering value
+            steering_val = steering.value
 
             # Angular change for this step
-            # Negative because: LEFT (steering=-1) should give positive angle change (CCW)
-            delta_heading = (
-                -(step_length / turning_radius) * steering.value * gear.value  # type: ignore
-            )
+            delta_heading = -(step_length / turning_radius) * steering_val * gear_val
 
-            # Compute center of the arc
-            # For LEFT turn (steering=-1): center is perpendicular left (heading + pi/2)
-            # For RIGHT turn (steering=1): center is perpendicular right (heading - pi/2)
-            center_angle = heading + (math.pi / 2) * (-steering.value)
-            cx = x + turning_radius * math.cos(center_angle)
-            cy = y + turning_radius * math.sin(center_angle)
+            # Compute the center of the arc using hardcoded HALF_PI constant
+            center_angle = heading + HALF_PI * (-steering_val)
+            cos_center = math.cos(center_angle)
+            sin_center = math.sin(center_angle)
+            cx = x + turning_radius * cos_center
+            cy = y + turning_radius * sin_center
 
-            # Update heading
+            # Update heading (normalize to [-pi, pi])
             new_heading = heading + delta_heading
-            new_heading = (new_heading + math.pi) % (
-                2 * math.pi
-            ) - math.pi  # Normalize to [-pi, pi]
+            # Fast normalization using hardcoded constants
+            if new_heading > PI:
+                new_heading -= TWO_PI
+            elif new_heading < -PI:
+                new_heading += TWO_PI
 
             # Compute the new position on the circle
-            new_center_angle = new_heading + (math.pi / 2) * (-steering.value)
+            new_center_angle = new_heading + HALF_PI * (-steering_val)
             new_x = cx - turning_radius * math.cos(new_center_angle)
             new_y = cy - turning_radius * math.sin(new_center_angle)
 
@@ -328,7 +345,8 @@ class Firetruck:
         return all_locations
 
     def _collect_poi_poses(self):
-        NUM_HEADINGS = 8  # 90 or 45 deg apart
+        NUM_HEADINGS = 1
+        # TODO: adjust the headings number back to 8
         headings = [i * (2 * math.pi / NUM_HEADINGS) for i in range(NUM_HEADINGS)]
 
         # Create Pos nodes
@@ -358,6 +376,7 @@ class Firetruck:
         """
         import networkx as nx
 
+        start_time = time.time()
         logger.info(f"Building roadmap with {len(self.poi_poses)} poses...")
 
         G = nx.DiGraph()
@@ -427,14 +446,18 @@ class Firetruck:
                     edge_count += 1
 
             # Progress logging
-            if (i + 1) % 10 == 0:
+            if (i + 1) % 100 == 0:
+                elapsed = time.time() - start_time
                 logger.debug(
                     f"Processed {i + 1}/{len(self.poi_poses)} poses, "
-                    f"{edge_count} edges, {collision_count} collisions"
+                    f"{edge_count} edges, {collision_count} collisions "
+                    f"(elapsed: {elapsed:.1f}s)"
                 )
 
+        elapsed_time = time.time() - start_time
         logger.info(
-            f"Roadmap built: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges, "
+            f"Roadmap built in {elapsed_time:.1f}s: "
+            f"{G.number_of_nodes()} nodes, {G.number_of_edges()} edges, "
             f"{collision_count} paths rejected due to collision"
         )
 
