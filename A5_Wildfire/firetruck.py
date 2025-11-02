@@ -10,6 +10,7 @@ import pygame
 from world import Pos, World
 from field import Cell
 import reeds_shepp as rs
+import networkx as nx
 
 CONNECTOR_DENSITY = 0.1  # Fraction of empty cells to use as connectors
 
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 INITIAL_HEADING = math.pi / 2
 FIREFIGHTING_DURATION = 5.0  # Time to suppress fire after arrival or ignition
+MAX_POI_DISTANCE = 3
 
 """
 Reeds-Shepp path segments are generated from cell center to cell center. This introduces a discrepancy, 
@@ -70,6 +72,10 @@ class Firetruck:
 
         # Generate points of interest for motion planning
         self.poi_locations = self._collect_poi_locations(origin=initial_location)
+        self.poi_poses = self._collect_poi_poses()
+
+        # Build roadmap
+        self.roadmap = self._build_roadmap()
 
     def _grid_to_pose(self, grid_pos: tuple[int, int], heading: float) -> Pos:
         """Convert the grid location to a Pos with heading"""
@@ -90,7 +96,7 @@ class Firetruck:
     def set_test_goal(self, goal: Pos):
         """Set a test goal and generate a Reeds-Shepp path for visualization"""
         self.test_goal = goal
-        step_size = 0.3  # meters between sampled waypoints
+        STEP_SIZE = 0.3  # meters between sampled waypoints
 
         try:
             # Generate the Reeds-Shepp path with direction information
@@ -98,7 +104,7 @@ class Firetruck:
                 start=self.pos,
                 goal=goal,
                 turning_radius=self.min_turning_radius,
-                step_size=step_size,
+                step_size=STEP_SIZE,
             )
 
             if result:
@@ -321,8 +327,120 @@ class Firetruck:
 
         return all_locations
 
-    # Rendering methods
+    def _collect_poi_poses(self):
+        NUM_HEADINGS = 8  # 90 or 45 deg apart
+        headings = [i * (2 * math.pi / NUM_HEADINGS) for i in range(NUM_HEADINGS)]
 
+        # Create Pos nodes
+        poses = []
+        for row, col in self.poi_locations:
+            x, y = self.world.grid_to_world(row, col)
+            for heading in headings:
+                poses.append(Pos(x, y, heading))
+        return poses
+
+    @staticmethod
+    def _should_poi_connect(
+        location1: Tuple[int, int], location2: Tuple[int, int]
+    ) -> bool:
+        # Calculate Chebyshev distance between locations
+        distance = max(
+            abs(location1[0] - location2[0]), abs(location1[1] - location2[1])
+        )
+        return distance <= MAX_POI_DISTANCE
+
+    def _build_roadmap(self) -> nx.DiGraph:
+        """
+        Build a directed graph roadmap connecting POI poses with Reeds-Shepp arcs.
+        Returns a NetworkX DiGraph where:
+        - Nodes are Pos (x, y, heading)
+        - Edges contain path waypoints, segments, and cost
+        """
+        import networkx as nx
+
+        logger.info(f"Building roadmap with {len(self.poi_poses)} poses...")
+
+        G = nx.DiGraph()
+
+        for pose in self.poi_poses:
+            G.add_node(pose)
+
+        # Group poses by location for efficient distance filtering
+        location_to_poses = {}
+        for pose in self.poi_poses:
+            loc = self.world.world_to_grid(pose.x, pose.y)
+            if loc not in location_to_poses:
+                location_to_poses[loc] = []
+            location_to_poses[loc].append(pose)
+
+        # Generate edges between nearby poses
+        edge_count = 0
+        collision_count = 0
+
+        for i, start_pose in enumerate(self.poi_poses):
+            start_loc = self.world.world_to_grid(start_pose.x, start_pose.y)
+
+            # Find nearby locations to connect to
+            for goal_loc, goal_poses in location_to_poses.items():
+                # Skip self-connections
+                if start_loc == goal_loc:
+                    continue
+
+                # Distance filter in grid space
+                if not self._should_poi_connect(start_loc, goal_loc):
+                    continue
+
+                # Try connecting to each heading at this location
+                for goal_pose in goal_poses:
+                    # Generate Reeds-Shepp path
+                    result = self._compute_reeds_shepp_path(
+                        start=start_pose,
+                        goal=goal_pose,
+                        turning_radius=self.min_turning_radius,
+                        step_size=1.0,
+                    )
+
+                    if not result:
+                        continue
+
+                    waypoints, segments = result
+
+                    # TODO: collision checks
+                    # Quick collision check
+                    # if self._check_path_collision(waypoints):
+                    #     collision_count += 1
+                    #     continue
+
+                    # Compute path cost (total path length)
+                    path_length = sum(
+                        seg.start.distance_to(seg.end) for seg in segments
+                    )
+
+                    # Add edge to graph
+                    G.add_edge(
+                        start_pose,
+                        goal_pose,
+                        weight=path_length,
+                        waypoints=waypoints,
+                        segments=segments,
+                    )
+                    edge_count += 1
+
+            # Progress logging
+            if (i + 1) % 10 == 0:
+                logger.debug(
+                    f"Processed {i + 1}/{len(self.poi_poses)} poses, "
+                    f"{edge_count} edges, {collision_count} collisions"
+                )
+
+        logger.info(
+            f"Roadmap built: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges, "
+            f"{collision_count} paths rejected due to collision"
+        )
+
+        return G
+
+    # Rendering methods
     def render(self):
         """Render the firetruck at its current position"""
         FIRETRUCK_COLOR = (220, 50, 50)  # Red
@@ -429,5 +547,47 @@ class Firetruck:
                 (center_x, center_y),
                 CIRCLE_RADIUS,
             )
+
+        self.world.display.blit(surface, (0, 0))
+
+    def render_roadmap(self):
+        """
+        Render the roadmap for visual validation.
+        Shows a subset of edges to avoid clutter.
+        """
+        if self.roadmap is None:
+            return
+
+        EDGE_COLOR = (150, 150, 255, 100)
+        NODE_COLOR = (100, 100, 200, 120)
+
+        # Create transparent surface
+        surface = pygame.Surface(
+            (self.world.display.get_width(), self.world.display.get_height()),
+            pygame.SRCALPHA,
+        )
+
+        # Draw edges
+        edges = list(self.roadmap.edges(data=True))
+
+        for start_pose, goal_pose, data in edges:
+            waypoints = data.get("waypoints", [])
+            if len(waypoints) < 2:
+                continue
+
+            # Draw the edge as a thin line
+            points = [self.world.world_to_pixel(wp.x, wp.y) for wp in waypoints]
+            pygame.draw.lines(surface, EDGE_COLOR, False, points, 1)
+
+        # Draw nodes (just small circles at POI locations)
+        drawn_locations = set()
+        for pose in self.poi_poses:
+            loc = self.world.world_to_grid(pose.x, pose.y)
+            if loc in drawn_locations:
+                continue
+            drawn_locations.add(loc)
+
+            px, py = self.world.world_to_pixel(pose.x, pose.y)
+            pygame.draw.circle(surface, NODE_COLOR, (px, py), 3)
 
         self.world.display.blit(surface, (0, 0))

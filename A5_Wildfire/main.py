@@ -3,8 +3,8 @@
 # See Gen AI usage approach write-up in the report
 
 # Motion-plan for firetruck
-# TODO: build a lattice for the roadmap using Reed-Shepp
-# TODO: consider 8 cardinal directions. Or maybe more?
+# TODO: persist roadmap for quick access between runs
+# TODO: collision checking for the R-S curves
 # TODO: drive toward the selected point; accel/decel
 # TODO: drive in forward and in reverse with different speeds
 # TODO: take into account the discrepancy between planning against body center and actual kinematics (pivot in the rear axle)
@@ -102,5 +102,6 @@ while running:
     firetruck.render_test_path()
     firetruck.update()
     firetruck.render()
+    firetruck.render_roadmap()
 
     pygame.display.flip()
