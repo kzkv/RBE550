@@ -53,18 +53,45 @@ class World:
     def grid_to_world(self, row: int, col: int) -> tuple[float, float]:
         """Returns the (x, y) center of the cell in meters from the upper left corner at the given (row, col)"""
         x = (col + 0.5) * self.cell_size
-        y = (row + 0.5) * self.cell_size
+
+        # Flip row to Cartesian: row 0 (top) -> highest y
+        y = (self.grid_dimensions - row - 0.5) * self.cell_size
         return x, y  # meters
 
     def world_to_grid(self, x: float, y: float) -> tuple[int, int]:
-        """Returns the (row, col) of the cell containing the given point coordinates (x, y) in meters"""
+        """
+        Returns the (row, col) of the cell containing the given Cartesian coordinates.
+        Cartesian: y=0 is at the bottom, y increases upward
+        Grid: row 0 is at the top, row increases downward
+        """
         col = int(x // self.cell_size)
-        row = int(y // self.cell_size)
+
+        # Flip y to grid row: high y -> low row
+        row = int((self.grid_dimensions * self.cell_size - y) // self.cell_size)
         return row, col
 
     def pixel_to_world(self, px: int, py: int) -> tuple[float, float]:
-        """Mouse pixel -> world coordinates (in meters)"""
-        return px / self.pixels_per_meter, py / self.pixels_per_meter
+        """
+        Convert pixel coordinates to world coordinates (Cartesian).
+        Pygame Y-axis points down, but we want Cartesian Y pointing up.
+        """
+        x = px / self.pixels_per_meter
+
+        # Flip Y: pygame y=0 is at the top, Cartesian y=0 is at bottom of field
+        # Note: field starts at pygame y=0, so we don't need to subtract hud_height
+        y = (self.field_dimensions - py) / self.pixels_per_meter
+        return x, y
+
+    def world_to_pixel(self, x: float, y: float) -> tuple[int, int]:
+        """
+        Convert world coordinates (Cartesian) to pixel coordinates.
+        Flip Y-axis for pygame rendering.
+        """
+        px = int(x * self.pixels_per_meter)
+
+        # Flip Y: Cartesian y=0 (bottom) -> pygame y=field_dimensions (bottom of field)
+        py = int(self.field_dimensions - y * self.pixels_per_meter)
+        return px, py
 
     def get_filtered_cells_coordinates(self, cell: "Cell") -> list[tuple[int, int]]:
         """Return a list of (row, col) coordinates for all cells matching the given type."""
@@ -132,8 +159,6 @@ class World:
     def render_hud(self, message: str = ""):
         HUD_BG_COLOR = (0, 0, 0)
         HUD_FONT_COLOR = (200, 200, 200)
-        WUMPUS_COLOR = (162, 32, 174)
-        FIRETRUCK_COLOR = (220, 50, 50)
 
         hud_rect = pygame.Rect(
             0, self.field_dimensions, self.field_dimensions, self.hud_height
