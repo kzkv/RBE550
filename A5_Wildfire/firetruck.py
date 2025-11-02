@@ -83,6 +83,9 @@ class Firetruck:
         # Build roadmap (with caching)
         self.roadmap = self._load_or_build_roadmap()
 
+        # Pre-render the roadmap surface (immutable)
+        self.roadmap_surface = self._create_roadmap_surface()
+
     def _grid_to_pose(self, grid_pos: tuple[int, int], heading: float) -> Pos:
         """Convert the grid location to a Pos with heading"""
         row, col = grid_pos
@@ -521,7 +524,7 @@ class Firetruck:
         FIRETRUCK_STRIPE_COLOR = (255, 255, 255)  # White stripe
 
         ppm = self.world.pixels_per_meter
-        Lpx = math.floor(self.length * ppm) - 1  # Adjusted for 7 PPM
+        Lpx = math.floor(self.length * ppm)
         Wpx = math.floor(self.width * ppm)
 
         # Create a surface and draw truck body
@@ -582,13 +585,13 @@ class Firetruck:
 
         self.world.display.blit(surface, (0, 0))
 
-    def render_roadmap(self):
+    def _create_roadmap_surface(self) -> pygame.Surface:
         """
-        Render the roadmap for visual validation.
-        Shows a subset of edges to avoid clutter.
+        Pre-render the roadmap to a surface.
+        This is called once during initialization since the roadmap is immutable.
         """
         if self.roadmap is None:
-            return
+            return pygame.Surface((0, 0), pygame.SRCALPHA)
 
         EDGE_COLOR = (150, 150, 255, 100)
         NODE_COLOR = (100, 100, 200, 120)
@@ -622,4 +625,13 @@ class Firetruck:
             px, py = self.world.world_to_pixel(pose.x, pose.y)
             pygame.draw.circle(surface, NODE_COLOR, (px, py), 3)
 
-        self.world.display.blit(surface, (0, 0))
+        logger.info("Roadmap surface pre-rendered")
+        return surface
+
+    def render_roadmap(self):
+        """
+        Render the pre-computed roadmap surface.
+        Fast operation - just blits the cached surface.
+        """
+        if self.roadmap_surface is not None:
+            self.world.display.blit(self.roadmap_surface, (0, 0))
