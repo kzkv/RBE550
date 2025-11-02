@@ -22,9 +22,9 @@ FORCE_REBUILD_ROADMAP = False  # Set to True to force roadmap rebuild
 
 logger = logging.getLogger(__name__)
 
-INITIAL_HEADING = math.pi / 2
+INITIAL_HEADING = -math.pi
 FIREFIGHTING_DURATION = 5.0  # Time to suppress fire after arrival or ignition
-MAX_POI_DISTANCE = 3
+MAX_POI_DISTANCE = 5
 NUM_HEADINGS = 8  # Headings per POI
 
 # Performance-critical constants for _integrate_path_step (called 26M+ times during roadmap building)
@@ -85,6 +85,9 @@ class Firetruck:
 
         # Pre-render the roadmap surface (immutable)
         self.roadmap_surface = self._create_roadmap_surface()
+
+        # Path planning state
+        self.planned_path_segments = []  # List of PathSegment for the current path
 
     def _grid_to_pose(self, grid_pos: tuple[int, int], heading: float) -> Pos:
         """Convert the grid location to a Pos with heading"""
@@ -517,6 +520,104 @@ class Firetruck:
 
         return G
 
+    def plan_path_to_location(self, target_location: tuple[int, int]) -> bool:
+        """
+        Plan a path from the current pose to a target grid location using the roadmap.
+        Returns True if a valid path was found, False otherwise.
+        """
+        if not self.roadmap:
+            logger.warning("No roadmap available for path planning")
+            return False
+
+        # Find the closest pose in the roadmap to our current position
+        start_pose = self._find_closest_roadmap_pose(self.pos)
+        if start_pose is None:
+            logger.warning(
+                f"Cannot find a roadmap pose near current position {self.pos}"
+            )
+            return False
+
+        # Find all goal poses at the target location
+        target_x, target_y = self.world.grid_to_world(*target_location)
+        goal_poses = [
+            pose
+            for pose in self.poi_poses
+            if abs(pose.x - target_x) < 0.1 and abs(pose.y - target_y) < 0.1
+        ]
+
+        if not goal_poses:
+            logger.warning(f"Target location {target_location} is not in the roadmap")
+            return False
+
+        # Try to find a path to any of the goal poses
+        best_path = None
+        best_length = float("inf")
+
+        for goal_pose in goal_poses:
+            try:
+                # Use A* to find the shortest path in the roadmap
+                path = nx.astar_path(
+                    self.roadmap, source=start_pose, target=goal_pose, weight="weight"
+                )
+
+                if path:
+                    # Calculate total path length
+                    path_length = sum(
+                        self.roadmap[path[i]][path[i + 1]]["weight"]
+                        for i in range(len(path) - 1)
+                    )
+
+                    if path_length < best_length:
+                        best_length = path_length
+                        best_path = path
+
+            except nx.NetworkXNoPath:
+                continue
+
+        if not best_path:
+            logger.warning(f"No path found to {target_location}")
+            return False
+
+        # Extract segments from the path
+        self.planned_path_segments = []
+        for i in range(len(best_path) - 1):
+            edge_data = self.roadmap[best_path[i]][best_path[i + 1]]
+            segments = edge_data.get("segments", [])
+            self.planned_path_segments.extend(segments)
+
+        logger.info(
+            f"Planned path to {target_location}: "
+            f"{len(self.planned_path_segments)} segments, "
+            f"length {best_length:.1f}m"
+        )
+        return True
+
+    def _find_closest_roadmap_pose(self, pos: Pos) -> Optional[Pos]:
+        """Find the closest pose in the roadmap to the given position."""
+        if not self.roadmap:
+            return None
+
+        min_distance = float("inf")
+        closest_pose = None
+
+        for roadmap_pose in self.roadmap.nodes():
+            # Calculate distance (position + heading difference)
+            position_dist = pos.distance_to(roadmap_pose)
+            heading_diff = pos.heading_error_to(roadmap_pose)
+
+            # Weighted distance: prioritize position over heading
+            total_dist = position_dist + 0.5 * heading_diff
+
+            if total_dist < min_distance:
+                min_distance = total_dist
+                closest_pose = roadmap_pose
+
+        return closest_pose
+
+    def clear_planned_path(self):
+        """Clear the planned path."""
+        self.planned_path_segments = []
+
     # Rendering methods
     def render(self):
         """Render the firetruck at its current position"""
@@ -635,3 +736,46 @@ class Firetruck:
         """
         if self.roadmap_surface is not None:
             self.world.display.blit(self.roadmap_surface, (0, 0))
+
+    def render_planned_path(self):
+        """
+        Render the planned path with forward segments in one color and reverse in another.
+        """
+        if not self.planned_path_segments:
+            return
+
+        FORWARD_COLOR = (50, 220, 50)  # Green for forward
+        REVERSE_COLOR = (220, 50, 220)  # Magenta for reverse
+        LINE_WIDTH = 3
+
+        # Group consecutive segments by direction for efficient rendering
+        current_direction = None
+        current_points = []
+
+        for segment in self.planned_path_segments:
+            # Start a new group if direction changes
+            if segment.is_forward != current_direction:
+                # Draw the previous group
+                if len(current_points) >= 2:
+                    color = FORWARD_COLOR if current_direction else REVERSE_COLOR
+                    pygame.draw.lines(
+                        self.world.display, color, False, current_points, LINE_WIDTH
+                    )
+
+                # Start new group
+                current_direction = segment.is_forward
+                current_points = [
+                    self.world.world_to_pixel(segment.start.x, segment.start.y)
+                ]
+
+            # Add end point to current group
+            current_points.append(
+                self.world.world_to_pixel(segment.end.x, segment.end.y)
+            )
+
+        # Draw the last group
+        if len(current_points) >= 2:
+            color = FORWARD_COLOR if current_direction else REVERSE_COLOR
+            pygame.draw.lines(
+                self.world.display, color, False, current_points, LINE_WIDTH
+            )

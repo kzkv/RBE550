@@ -71,7 +71,13 @@ while running:
                 # world.field.ignite(row, col)
                 pass
             elif world.field.get_cell(row, col) == Cell.EMPTY:
-                pass
+                # Plan a path to the clicked cell
+                if firetruck.plan_path_to_location((row, col)):
+                    final_pose = firetruck.planned_path_segments[-1].end
+                    firetruck.set_pose(final_pose)
+                    logger.info(f"Planned path to {(row, col)}")
+                else:
+                    logger.warning(f"Could not plan path to {(row, col)}")
 
     if world.world_time >= PAR_TIME:
         # TODO: consider what parts of the rendering should be done here
@@ -86,17 +92,18 @@ while running:
     world.render_spread()
     world.render_hud()
 
-    firetruck.render_roadmap()
+    # firetruck.render_roadmap()
 
-    wumpus.update()
-    wumpus.render_priority_heatmap()
-    wumpus.move(dt_world)
-    wumpus.render_path()
-    wumpus.render()
-    wumpus.set_goal_auto()
+    # wumpus.update()
+    # wumpus.render_priority_heatmap()
+    # wumpus.move(dt_world)
+    # wumpus.render_path()
+    # wumpus.render()
+    # wumpus.set_goal_auto()
 
     # firetruck.render_poi_locations()
     firetruck.update()
+    firetruck.render_planned_path()
     firetruck.render()
 
     pygame.display.flip()
