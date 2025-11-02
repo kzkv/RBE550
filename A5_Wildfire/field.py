@@ -49,7 +49,7 @@ CELL_COLORS = {
 }
 
 # Collision overlay rendering color
-COLLISION_OVERLAY_COLOR = (255, 100, 150, 50)
+COLLISION_OVERLAY_COLOR = (0, 0, 0, 25)
 
 
 class Field:
@@ -154,10 +154,6 @@ class Field:
         # Vectorized approach: find all collision cells at once
         collision_rows, collision_cols = np.where(self.collision_overlay)
 
-        logger.info(
-            f"Rendering {len(collision_rows)} collision cells to overlay surface..."
-        )
-
         # Batch render collision cells
         ppf_int = int(ppf)
         for row, col in zip(collision_rows, collision_cols):
@@ -166,7 +162,6 @@ class Field:
             rect = pygame.Rect(x, y, ppf_int, ppf_int)
             pygame.draw.rect(surf, COLLISION_OVERLAY_COLOR, rect)
 
-        logger.info(f"Overlay surface created: {width}x{height} pixels")
         return surf
 
     def render_collision_overlay(self) -> None:

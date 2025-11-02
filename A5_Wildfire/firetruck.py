@@ -4,7 +4,6 @@ import math
 import time
 from pathlib import Path
 
-from scipy.ndimage import binary_dilation
 import numpy as np
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
@@ -27,6 +26,12 @@ INITIAL_HEADING = -math.pi
 FIREFIGHTING_DURATION = 5.0  # Time to suppress fire after arrival or ignition
 MAX_POI_DISTANCE = 5
 NUM_HEADINGS = 8  # Headings per POI
+
+COVERAGE_RADIUS = (
+    2.0  # Cell distance where the truck is effective (10 meters / 5 meters per cell)
+)
+REDUNDANCY_THRESHOLD = 4  # Add redundant POI if covering this many obstacles
+MIN_REDUNDANCY_COUNT = 2  # Target at least 2 POIs per dense area
 
 # Performance-critical constants for _integrate_path_step (called 26M+ times during roadmap building)
 # Hardcoded to avoid repeated math.pi lookups and calculations
@@ -91,10 +96,12 @@ class Firetruck:
             self.poses_by_location[loc].append(pose)
 
         # Build roadmap (with caching)
-        self.roadmap = self._load_or_build_roadmap()
+        # self.roadmap = self._load_or_build_roadmap()
+        self.roadmap = None
 
         # Pre-render the roadmap surface (immutable)
-        self.roadmap_surface = self._create_roadmap_surface()
+        # self.roadmap_surface = self._create_roadmap_surface()
+        self.roadmap_surface = None
 
         # Path planning state
         self.planned_path_segments = []  # List of PathSegment for the current path
@@ -296,49 +303,143 @@ class Firetruck:
 
     def _collect_poi_locations(self, origin: Tuple[int, int]) -> List[Tuple[int, int]]:
         """
-        Collect all points of interest for motion planning.
-        POIs are EMPTY cells adjacent to OBSTACLE cells in the initial field and connector locations.
-        Always includes the firetruck's origin location.
+        Collect points of interest for motion planning.
+        POIs are EMPTY cells positioned to cover obstacles within 10m (2-cell Euclidean radius).
+        Uses a greedy coverage algorithm to minimize the number of POIs while maximizing obstacle coverage.
+        Then adds redundant POIs in high-density obstacle areas for strategic flexibility.
 
-        Returns a list of locations (row, col) for POIs, connectors, and origin
+        Returns a list of locations (row, col) for POIs and origin
         """
         field = self.world.field
 
-        # Find empty cells adjacent to obstacles
+        # Find all obstacles that need coverage
         obstacle_mask = field.cells == Cell.OBSTACLE
-        dilated_obstacles = binary_dilation(obstacle_mask, structure=np.ones((3, 3)))
+        obstacle_positions = set(zip(*np.where(obstacle_mask)))
+
+        # Find all empty cells as potential POIs
         empty_cells = field.cells == Cell.EMPTY
+        empty_positions = list(zip(*np.where(empty_cells)))
 
-        # Valid POIs: empty cells adjacent to obstacles
-        poi_mask = empty_cells & dilated_obstacles
+        # For each empty cell, calculate which obstacles it can cover (within 10m = 2 cells Euclidean)
+        potential_pois = {}  # {(row, col): set of obstacles covered}
 
-        # Extract locations as (row, col) tuples
-        poi_rows, poi_cols = np.where(poi_mask)
-        poi_locations = list(zip(poi_rows, poi_cols))
+        for empty_row, empty_col in empty_positions:
+            covered = set()
+            for obs_row, obs_col in obstacle_positions:
+                # Euclidean distance between cell centers
+                distance = math.sqrt(
+                    (empty_row - obs_row) ** 2 + (empty_col - obs_col) ** 2
+                )
+                if distance <= COVERAGE_RADIUS:
+                    covered.add((obs_row, obs_col))
 
-        # Generate connector locations: random empty cells not already in POIs
-        # These serve as intermediate waypoints for Reeds-Shepp maneuvering
-        connector_mask = empty_cells & ~poi_mask
-        connector_rows, connector_cols = np.where(connector_mask)
+            if covered:  # Only consider cells that cover at least one obstacle
+                potential_pois[(empty_row, empty_col)] = covered
 
-        if len(connector_rows) > 0:
-            # Select a random subset of empty cells as connectors
-            num_connectors = max(1, int(CONNECTOR_DENSITY * len(connector_rows)))
-            connector_indices = field.rng.choice(
-                len(connector_rows), size=num_connectors, replace=False
-            )
-            connector_locations = [
-                (connector_rows[i], connector_cols[i]) for i in connector_indices
+        # Phase 1: Greedy set cover for basic coverage
+        selected_pois = []
+        uncovered_obstacles = obstacle_positions.copy()
+
+        # Keep track of coverage count for each obstacle
+        obstacle_coverage_count = {obs: 0 for obs in obstacle_positions}
+
+        while uncovered_obstacles and potential_pois:
+            # Find the POI that covers the most uncovered obstacles
+            best_poi = None
+            best_coverage = set()
+            best_count = 0
+
+            for poi, covered in potential_pois.items():
+                newly_covered = covered & uncovered_obstacles
+                if len(newly_covered) > best_count:
+                    best_poi = poi
+                    best_coverage = newly_covered
+                    best_count = len(newly_covered)
+
+            if best_poi is None:
+                break
+
+            # Add the best POI to the selected list
+            selected_pois.append(best_poi)
+            uncovered_obstacles -= best_coverage
+
+            # Update coverage counts
+            for obs in potential_pois[best_poi]:
+                obstacle_coverage_count[obs] += 1
+
+            # Remove the selected POI from candidates
+            del potential_pois[best_poi]
+
+        logger.info(
+            f"Phase 1: Selected {len(selected_pois)} POIs covering "
+            f"{len(obstacle_positions) - len(uncovered_obstacles)}/{len(obstacle_positions)} obstacles"
+        )
+
+        # Phase 2: Add redundant coverage in high-density areas
+        # Find areas with many obstacles but low redundancy
+
+        # Rebuild potential_pois with remaining candidates
+        remaining_candidates = [
+            (poi, covered)
+            for poi, covered in [
+                (p, potential_pois.get(p))
+                for p in empty_positions
+                if p not in selected_pois
             ]
-        else:
-            connector_locations = []
+            if covered is not None
+        ]
 
-        # Combine all locations, avoiding duplicates
-        all_locations = poi_locations + connector_locations
-        if origin not in all_locations:
-            all_locations.append(origin)
+        # Sort candidates by number of obstacles they cover (descending)
+        remaining_candidates.sort(key=lambda x: len(x[1]), reverse=True)
 
-        return all_locations
+        redundant_pois_added = 0
+        for poi, covered in remaining_candidates:
+            # Check if this POI covers a dense area with insufficient redundancy
+            if len(covered) >= REDUNDANCY_THRESHOLD:
+                # Count how many of these obstacles already have sufficient coverage
+                low_redundancy_obstacles = sum(
+                    1
+                    for obs in covered
+                    if obstacle_coverage_count.get(obs, 0) < MIN_REDUNDANCY_COUNT
+                )
+
+                # If many obstacles in this cluster need more coverage, add this POI
+                if low_redundancy_obstacles >= REDUNDANCY_THRESHOLD * 0.5:
+                    selected_pois.append(poi)
+                    redundant_pois_added += 1
+
+                    # Update coverage counts
+                    for obs in covered:
+                        obstacle_coverage_count[obs] += 1
+
+        logger.info(
+            f"Phase 2: Added {redundant_pois_added} redundant POIs for dense obstacle areas"
+        )
+
+        # Always include the origin
+        if origin not in selected_pois:
+            selected_pois.append(origin)
+
+        # Calculate final coverage statistics
+        avg_coverage = (
+            sum(obstacle_coverage_count.values()) / len(obstacle_coverage_count)
+            if obstacle_coverage_count
+            else 0
+        )
+        max_coverage = (
+            max(obstacle_coverage_count.values()) if obstacle_coverage_count else 0
+        )
+
+        logger.info(
+            f"Total: {len(selected_pois)} POIs | "
+            f"Avg coverage per obstacle: {avg_coverage:.2f} | "
+            f"Max coverage: {max_coverage}"
+        )
+
+        if uncovered_obstacles:
+            logger.warning(f"{len(uncovered_obstacles)} obstacles have no POI coverage")
+
+        return selected_pois
 
     def _collect_poi_poses(self):
         headings = [i * (2 * math.pi / NUM_HEADINGS) for i in range(NUM_HEADINGS)]
@@ -680,9 +781,10 @@ class Firetruck:
         pygame.draw.lines(self.world.display, color, False, pts, 2)
 
     def render_poi_locations(self):
-        """Render POI location markers"""
+        """Render POI location markers with circular coverage area outlines"""
         cell_dim = self.world.cell_dimensions
-        LOCATION_COLOR = (220, 50, 50, 100)
+        LOCATION_COLOR = (100, 150, 255, 150)  # Light blue (water color)
+        COVERAGE_FILL_COLOR = (100, 150, 255, 40)  # Light blue fill for coverage
         CIRCLE_RADIUS = cell_dim // 2 - 4
 
         surface = pygame.Surface(
@@ -691,6 +793,28 @@ class Firetruck:
         )
 
         for row, col in self.poi_locations:
+            # Draw coverage area as filled blue squares (cells within 10m = 2-cell Euclidean radius)
+            for dr in range(-2, 3):  # Check ±2 cells
+                for dc in range(-2, 3):
+                    covered_row = row + dr
+                    covered_col = col + dc
+
+                    # Check if within bounds
+                    if not self.world.field.in_bounds(covered_row, covered_col):
+                        continue
+
+                    # Check if within Euclidean distance (circular coverage)
+                    distance = math.sqrt(dr * dr + dc * dc)
+                    if distance <= COVERAGE_RADIUS:
+                        # Draw filled cell
+                        x = covered_col * cell_dim
+                        y = covered_row * cell_dim
+                        rect = pygame.Rect(x, y, cell_dim, cell_dim)
+                        pygame.draw.rect(
+                            surface, COVERAGE_FILL_COLOR, rect, 0
+                        )  # 0 = filled
+
+            # Draw POI center marker on top
             center_x = int((col + 0.5) * cell_dim)
             center_y = int((row + 0.5) * cell_dim)
             pygame.draw.circle(
@@ -795,3 +919,42 @@ class Firetruck:
             pygame.draw.lines(
                 self.world.display, color, False, current_points, LINE_WIDTH
             )
+
+    def render_coverage_radius(self):
+        """Render the 10m (2-cell) coverage radius around the firetruck when stationary"""
+        # Only show radius when the truck has no planned path (is at rest)
+        if self.planned_path_segments:
+            return
+
+        cell_dim = self.world.cell_dimensions
+        COVERAGE_FILL_COLOR = (100, 150, 255, 40)  # Light blue fill
+
+        surface = pygame.Surface(
+            (self.world.display.get_width(), self.world.display.get_height()),
+            pygame.SRCALPHA,
+        )
+
+        truck_row, truck_col = self.get_location()
+
+        # Draw coverage area as filled blue squares (cells within 10m = 2-cell Euclidean radius)
+        for dr in range(-2, 3):  # Check ±2 cells
+            for dc in range(-2, 3):
+                covered_row = truck_row + dr
+                covered_col = truck_col + dc
+
+                # Check if within bounds
+                if not self.world.field.in_bounds(covered_row, covered_col):
+                    continue
+
+                # Check if within Euclidean distance (circular coverage)
+                distance = math.sqrt(dr * dr + dc * dc)
+                if distance <= COVERAGE_RADIUS:
+                    # Draw filled cell
+                    x = covered_col * cell_dim
+                    y = covered_row * cell_dim
+                    rect = pygame.Rect(x, y, cell_dim, cell_dim)
+                    pygame.draw.rect(
+                        surface, COVERAGE_FILL_COLOR, rect, 0
+                    )  # 0 = filled
+
+        self.world.display.blit(surface, (0, 0))

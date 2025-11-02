@@ -101,8 +101,9 @@ while running:
     # wumpus.render()
     # wumpus.set_goal_auto()
 
-    # firetruck.render_poi_locations()
+    firetruck.render_poi_locations()
     firetruck.update()
+    firetruck.render_coverage_radius()
     firetruck.render_planned_path()
     firetruck.render()
 
