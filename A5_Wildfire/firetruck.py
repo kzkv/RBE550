@@ -1,11 +1,14 @@
+import hashlib
 import logging
 import math
 import time
+from pathlib import Path
+
 from scipy.ndimage import binary_dilation
 import numpy as np
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
-
+import pickle
 import pygame
 
 from world import Pos, World
@@ -14,6 +17,8 @@ import reeds_shepp as rs
 import networkx as nx
 
 CONNECTOR_DENSITY = 0.1  # Fraction of empty cells to use as connectors
+
+FORCE_REBUILD_ROADMAP = False  # Set to True to force roadmap rebuild
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +80,8 @@ class Firetruck:
         self.poi_locations = self._collect_poi_locations(origin=initial_location)
         self.poi_poses = self._collect_poi_poses()
 
-        # Build roadmap
-        self.roadmap = self._build_roadmap()
+        # Build roadmap (with caching)
+        self.roadmap = self._load_or_build_roadmap()
 
     def _grid_to_pose(self, grid_pos: tuple[int, int], heading: float) -> Pos:
         """Convert the grid location to a Pos with heading"""
@@ -213,8 +218,8 @@ class Firetruck:
 
             # Angular change for this step
             delta_heading = (
-                -(step_length / turning_radius) * steering_val * gear_val
-            )  # noqa
+                -(step_length / turning_radius) * steering_val * gear_val  # noqa
+            )
 
             # Compute the center of the arc using hardcoded HALF_PI constant
             center_angle = heading + HALF_PI * (-steering_val)
@@ -339,6 +344,86 @@ class Firetruck:
             abs(location1[0] - location2[0]), abs(location1[1] - location2[1])
         )
         return distance <= MAX_POI_DISTANCE
+
+    def _get_roadmap_cache_path(self) -> Path:
+        """
+        Generate a unique cache filename based on the field configuration.
+        Uses a hash of the field state to ensure cache validity.
+        """
+        cache_dir = Path("cache")
+        cache_dir.mkdir(exist_ok=True)
+
+        # Create a hash from field configuration and relevant parameters
+        hash_data = {
+            "field_cells": self.world.field.cells.tobytes(),
+            "poi_locations": tuple(sorted(self.poi_locations)),
+            "min_turning_radius": self.min_turning_radius,
+            "max_poi_distance": MAX_POI_DISTANCE,
+            "num_headings": NUM_HEADINGS,
+        }
+
+        # Serialize and hash
+        hash_str = hashlib.sha256(str(hash_data).encode()).hexdigest()[:16]
+
+        logger.info(f"Roadmap cache hash: {hash_str}")
+
+        return cache_dir / f"roadmap_{hash_str}.pkl"
+
+    @staticmethod
+    def _save_roadmap(roadmap: nx.DiGraph, cache_path: Path):
+        """Save the roadmap to disk using pickle."""
+        try:
+            with open(cache_path, "wb") as f:
+                pickle.dump(roadmap, f, protocol=pickle.HIGHEST_PROTOCOL)  # noqa
+            logger.info(f"Roadmap saved to {cache_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save roadmap cache: {e}")
+
+    @staticmethod
+    def _load_roadmap(cache_path: Path) -> Optional[nx.DiGraph]:
+        """Load a cached roadmap from the disk."""
+        try:
+            with open(cache_path, "rb") as f:
+                roadmap = pickle.load(f)
+            logger.info(f"Loaded cached roadmap from {cache_path}")
+            logger.info(
+                f"Roadmap: {roadmap.number_of_nodes()} nodes, "
+                f"{roadmap.number_of_edges()} edges"
+            )
+            return roadmap
+        except FileNotFoundError:
+            logger.debug(f"No cached roadmap found at {cache_path}")
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to load roadmap cache: {e}")
+            return None
+
+    def _load_or_build_roadmap(self) -> nx.DiGraph:
+        """
+        Load roadmap from cache if available, otherwise build and cache it.
+        """
+        cache_path = self._get_roadmap_cache_path()
+
+        # Check if force rebuild is enabled
+        if FORCE_REBUILD_ROADMAP:
+            logger.info("Force rebuild enabled - skipping cache lookup")
+            roadmap = self._build_roadmap()
+            self._save_roadmap(roadmap, cache_path)
+            return roadmap
+
+        # Try to load from the cache first
+        roadmap = self._load_roadmap(cache_path)
+        if roadmap is not None:
+            return roadmap
+
+        # Cache miss - build the roadmap
+        logger.info("Building roadmap from scratch...")
+        roadmap = self._build_roadmap()
+
+        # Save to cache for next time
+        self._save_roadmap(roadmap, cache_path)
+
+        return roadmap
 
     def _build_roadmap(self) -> nx.DiGraph:
         """
