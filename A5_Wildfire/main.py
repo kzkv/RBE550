@@ -24,11 +24,10 @@ import logging
 
 import numpy as np
 import pygame
-import math
 
 from field import Cell
 from firetruck import Firetruck
-from world import World, Pos
+from world import World
 from wumpus import Wumpus
 
 logger = logging.getLogger(__name__)
@@ -58,6 +57,8 @@ world.firetruck = firetruck
 # Reset the clock to disregard setup time
 world.clock.tick()
 
+logger.info("Starting main loop")
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -71,7 +72,7 @@ while running:
             row, col = world.world_to_grid(x, y)
 
             if world.field.get_cell(row, col) == Cell.OBSTACLE:
-                # world.field.ignite(row, col)
+                world.field.ignite(row, col)
                 pass
             elif world.field.get_cell(row, col) == Cell.EMPTY:
                 # Find the nearest POI to the clicked cell

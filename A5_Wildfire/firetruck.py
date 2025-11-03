@@ -684,7 +684,7 @@ class Firetruck:
         target_fine_row = target_location[0] * cells_per_coarse + cells_per_coarse // 2
         target_fine_col = target_location[1] * cells_per_coarse + cells_per_coarse // 2
 
-        # Find nearest POI using Euclidean distance
+        # Find the nearest POI using Euclidean distance
         min_distance = float("inf")
         nearest_poi = None
 
@@ -715,6 +715,7 @@ class Firetruck:
         """
         if not self.roadmap:
             logger.warning("No roadmap available for path planning")
+            self.clear_planned_path()  # Clear a stale path
             return False
 
         # Find the closest pose in the roadmap to our current position
@@ -723,6 +724,7 @@ class Firetruck:
             logger.warning(
                 f"Cannot find a roadmap pose near current position {self.pos}"
             )
+            self.clear_planned_path()  # Clear a stale path
             return False
 
         # Get all goal poses at the target POI location
@@ -730,6 +732,7 @@ class Firetruck:
 
         if not goal_poses:
             logger.warning(f"Target POI {target_poi} has no poses in the roadmap")
+            self.clear_planned_path()  # Clear a stale path
             return False
 
         # Heuristic for A*: Euclidean distance between poses
@@ -781,6 +784,7 @@ class Firetruck:
 
         if not best_path:
             logger.warning(f"No path found to POI {target_poi}")
+            self.clear_planned_path()  # Clear stale path on failure
             return False
 
         # Extract segments from the best path
@@ -795,7 +799,7 @@ class Firetruck:
             seg.start.distance_to(seg.end) for seg in self.planned_path_segments
         )
 
-        # Count forward vs reverse segments
+        # Count forward vs. reverse segments
         forward_count = sum(1 for seg in self.planned_path_segments if seg.is_forward)
         reverse_count = len(self.planned_path_segments) - forward_count
 
@@ -809,7 +813,8 @@ class Firetruck:
 
     def _find_closest_roadmap_pose(self, pos: Pos) -> Optional[Pos]:
         """Find the closest pose in the roadmap to the given position."""
-        if not self.roadmap:
+        if not self.roadmap or self.roadmap.number_of_nodes() == 0:
+            logger.error("Roadmap is empty or not initialized")
             return None
 
         min_distance = float("inf")
@@ -826,6 +831,11 @@ class Firetruck:
             if total_dist < min_distance:
                 min_distance = total_dist
                 closest_pose = roadmap_pose
+
+        if closest_pose is None:
+            logger.error(f"Could not find any roadmap pose near {pos}")
+        else:
+            logger.debug(f"Found closest roadmap pose at distance {min_distance:.2f}m")
 
         return closest_pose
 
