@@ -37,6 +37,7 @@ class World:
         self.clock = pygame.time.Clock()
         self.time_speed = time_speed
         self.world_time = 0.0  # World time in seconds
+        self.dt_world = 0.0  # Delta time in seconds
 
         self.field = Field(seed, self.grid_dimensions, OBSTACLE_DENSITY, world=self)
         self.wumpus = None
@@ -104,11 +105,12 @@ class World:
     def set_firetruck(self, firetruck: "Firetruck"):
         self.firetruck = firetruck
 
-    def update(self) -> float:
+    def update(self):
         """Update world state with delta time adjusted for the multiplier"""
-        dt = self.clock.tick(60) / 1000.0
-        self.world_time += dt * self.time_speed
-        return dt * self.time_speed  # return time delta in world time
+        dt_real = self.clock.tick(60) / 1000.0  # seconds (60 FPS)
+        dt_world = dt_real * self.time_speed
+        self.world_time += dt_world
+        self.dt_world = dt_world  # Store for use by other components
 
     # Rendering
     def clear(self):

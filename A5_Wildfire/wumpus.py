@@ -321,13 +321,13 @@ class Wumpus:
     def get_location(self) -> tuple[int, int]:
         return int(self.location[0]), int(self.location[1])
 
-    def move(self, dt_world: float):
+    def move(self):
         """Execute motion along the planned path with an adjustable pace."""
 
         if not self.path or self.goal is None or self.location == self.goal:
             return
 
-        self._movement_timer += dt_world
+        self._movement_timer += self.world.dt_world
 
         # Move to the next path point (self.path[0] is the current location) if enough time has passed;
         # self.path gets recalculated on each updated either way, so the step is always toward self.path[1]

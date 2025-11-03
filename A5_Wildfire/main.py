@@ -38,7 +38,7 @@ pygame.display.set_caption("Wildfire")
 
 # SEED = 67
 SEED = 41
-TIME_SPEED = 10.0  # Time speed coefficient
+TIME_SPEED = 1.0  # Time speed coefficient
 PAR_TIME = 3600.0
 
 WUMPUS_ROWS = (0, 10)
@@ -81,8 +81,6 @@ while running:
                 else:
                     # Plan a path to the nearest POI
                     if firetruck.plan_path_to_poi(nearest_poi):
-                        final_pose = firetruck.planned_path_segments[-1].end
-                        firetruck.set_pose(final_pose)
                         logger.info(f"Planned path to nearest POI at {nearest_poi}")
                     else:
                         logger.warning(f"Could not plan path to POI at {nearest_poi}")
@@ -92,7 +90,7 @@ while running:
         world.render_hud(message="Time's up!")
         continue
 
-    dt_world = world.update()
+    world.update()
     world.field.update_burning_cells()
     world.clear()
     world.render_field()
