@@ -94,14 +94,15 @@ while running:
 
     # firetruck.render_roadmap()
 
-    # wumpus.update()
-    # wumpus.render_priority_heatmap()
-    # wumpus.move(dt_world)
-    # wumpus.render_path()
-    # wumpus.render()
-    # wumpus.set_goal_auto()
+    wumpus.update()
+    wumpus.render_priority_heatmap()
+    wumpus.move(dt_world)
+    wumpus.render_path()
+    wumpus.render()
+    wumpus.set_goal_auto()
 
-    firetruck.render_poi_locations()
+    # firetruck.render_poi_locations()
+    firetruck.render_top_priority_pois()
     firetruck.update()
     firetruck.render_coverage_radius()
     firetruck.render_planned_path()

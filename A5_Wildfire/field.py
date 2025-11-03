@@ -19,7 +19,9 @@ COLLISION_DISCRETIZATION = 0.2  # meters per fine grid cell
 
 SPREAD_DURATION = 10.0  # s, time to spread fire after ignition
 SPREAD_RADIUS = 30.0  # m
-BURNOUT_DURATION = 30.0  # s, time to burn out after ignition
+BURNOUT_DURATION = (
+    360.0  # s, time to burn out after ignition; give Firetruck a chance to score points
+)
 FIRETRUCK_COVERAGE_RADIUS = 10.0  # m
 
 """

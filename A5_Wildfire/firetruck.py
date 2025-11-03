@@ -31,6 +31,10 @@ COVERAGE_RADIUS_METERS = 10.0  # meters
 MAX_POI_COUNT = 200  # Maximum number of POIs to select
 POI_EXCLUSION_RADIUS_FINE = 50  # Fine cells - avoid clustering POIs too closely
 
+TOP_CANDIDATES_COUNT = (
+    20  # Number of POIs to select to be rendered (and considered for the goal)
+)
+
 # Performance-critical constants for _integrate_path_step (called 26M+ times during roadmap building)
 # Hardcoded to avoid repeated math.pi lookups and calculations
 HALF_PI = 1.5707963267948966  # math.pi / 2
@@ -84,8 +88,12 @@ class Firetruck:
         self.poi_locations = self._collect_poi_locations(origin=initial_location)
         self.poi_poses = self._collect_poi_poses()
 
+        # Precompute which fine-grid cells each POI can reach
+        self.poi_coverage_map = self._precompute_poi_coverage()
+
         # Build location-indexed dictionary for O(1) lookup
         # This is a significant speed-up for the A* path finding
+        # TODO: this will be removed, as POIs are no longer location-bound
         self.poses_by_location = {}
         for pose in self.poi_poses:
             loc = pose.location
@@ -374,9 +382,6 @@ class Firetruck:
             # Add origin if not already covered by a nearby POI
             if origin_fine not in selected_fine_pois:
                 selected_fine_pois.append(origin_fine)
-                logger.info(
-                    f"Added origin {origin} (fine grid: {origin_fine}) to POI list"
-                )
 
         logger.info(f"Final POI count: {len(selected_fine_pois)} fine-grid locations")
 
@@ -402,6 +407,86 @@ class Firetruck:
                 poses.append(Pos(x, y, heading, location=(fine_row, fine_col)))
 
         return poses
+
+    def _precompute_poi_coverage(self) -> dict:
+        """
+        Precompute which COARSE-grid cells each POI can reach.
+        Returns dict mapping POI location -> set of coarse-grid cells within range.
+        """
+        coverage_map = {}
+        field = self.world.field
+        cells_per_coarse = int(field.world.cell_size / field.collision_discretization)
+        coverage_radius_coarse = int(
+            np.ceil(COVERAGE_RADIUS_METERS / field.world.cell_size)
+        )
+
+        for poi_fine_loc in self.poi_locations:
+            # Convert POI to coarse grid
+            poi_coarse_row = poi_fine_loc[0] // cells_per_coarse
+            poi_coarse_col = poi_fine_loc[1] // cells_per_coarse
+
+            covered_cells = set()
+
+            # Check coarse cells within the bounding box
+            for dr in range(-coverage_radius_coarse - 1, coverage_radius_coarse + 2):
+                for dc in range(
+                    -coverage_radius_coarse - 1, coverage_radius_coarse + 2
+                ):
+                    cell_row = poi_coarse_row + dr
+                    cell_col = poi_coarse_col + dc
+
+                    # Check bounds
+                    if (
+                        0 <= cell_row < field.grid_dimensions
+                        and 0 <= cell_col < field.grid_dimensions
+                    ):
+                        # Check Euclidean distance in meters
+                        dx = dc * field.world.cell_size
+                        dy = dr * field.world.cell_size
+                        dist = math.sqrt(dx * dx + dy * dy)
+
+                        if dist <= COVERAGE_RADIUS_METERS:
+                            covered_cells.add((cell_row, cell_col))
+
+            coverage_map[poi_fine_loc] = covered_cells
+
+        return coverage_map
+
+    def rank_pois_by_priority(self) -> List[Tuple[Tuple[int, int], float, int]]:
+        """Fast POI ranking using precomputed coverage and set intersection."""
+        truck_loc = self.get_location()
+        field = self.world.field
+
+        # Truck position in fine grid
+        cells_per_coarse = int(field.world.cell_size / field.collision_discretization)
+        truck_fine = np.array(
+            [
+                truck_loc[0] * cells_per_coarse + cells_per_coarse // 2,
+                truck_loc[1] * cells_per_coarse + cells_per_coarse // 2,
+            ]
+        )
+
+        # Get burning cells (coarse grid)
+        burning_coarse = np.argwhere(field.cells == Cell.BURNING)
+        burning_set = set(map(tuple, burning_coarse))
+
+        # Vectorized distances
+        poi_array = np.array(self.poi_locations)
+        distances = np.sqrt(np.sum((poi_array - truck_fine) ** 2, axis=1))
+
+        # Count fires via fast-set intersection
+        results = []
+        for i, poi_loc in enumerate(self.poi_locations):
+            covered_cells = self.poi_coverage_map[poi_loc]
+            fire_count = len(
+                covered_cells & burning_set
+            )  # O(min(|covered|, |burning|))
+
+            if fire_count > 0:
+                results.append((poi_loc, distances[i], fire_count))
+
+        results.sort(key=lambda x: (-x[2], x[1]))
+        return results
 
     @staticmethod
     def _should_poi_connect(
@@ -835,8 +920,8 @@ class Firetruck:
             locations: List of (fine_row, fine_col) tuples to draw circles around
             draw_center_markers: If True, draw a small marker at each location center
         """
-        COVERAGE_FILL_COLOR = (100, 150, 255, 40)  # Light blue fill
-        MARKER_COLOR = (100, 150, 255, 150)  # Light blue marker
+        COVERAGE_FILL_COLOR = (100, 150, 255, 40)
+        MARKER_COLOR = (100, 150, 255, 150)
         COVERAGE_RADIUS_PIXELS = int(
             COVERAGE_RADIUS_METERS * self.world.pixels_per_meter
         )
@@ -907,3 +992,74 @@ class Firetruck:
     def render_poi_locations(self):
         """Render POI location markers with 10 m coverage circles"""
         self._render_coverage_circles(self.poi_locations, draw_center_markers=True)
+
+    def render_top_priority_pois(self):
+        """
+        Render the top N priority POIs with marker size normalized by fire coverage.
+        Marker size scales from small to cell_size based on relative fire count.
+        """
+
+        # Get ranked POIs
+        ranked_pois = self.rank_pois_by_priority()
+
+        if not ranked_pois:
+            return
+
+        # Take top N
+        top_pois = ranked_pois[:TOP_CANDIDATES_COUNT]
+
+        # Extract fire counts for normalization
+        fire_counts = np.array([fire_count for _, _, fire_count in top_pois])
+
+        min_count = fire_counts.min()
+        max_count = fire_counts.max()
+
+        # Define marker size range (in pixels)
+        MIN_MARKER_RADIUS = 3  # pixels
+        MAX_MARKER_RADIUS = int(
+            self.world.cell_size * self.world.pixels_per_meter
+        )  # cell size in pixels
+
+        # Normalize fire counts to marker sizes
+        if max_count > min_count:
+            # Linear interpolation
+            normalized = (fire_counts - min_count) / (max_count - min_count)
+            marker_radii = (
+                MIN_MARKER_RADIUS + normalized * (MAX_MARKER_RADIUS - MIN_MARKER_RADIUS)
+            ).astype(int)
+        else:
+            # All have the same count-use mid-size
+            marker_radii = np.full(
+                len(top_pois), (MIN_MARKER_RADIUS + MAX_MARKER_RADIUS) // 2, dtype=int
+            )
+
+        # Color scheme for top POIs (red/orange gradient for urgency)
+        MARKER_COLOR = (100, 150, 255, 150)
+
+        field = self.world.field
+
+        # Create a surface for rendering
+        surface = pygame.Surface(
+            (self.world.display.get_width(), self.world.display.get_height()),
+            pygame.SRCALPHA,
+        )
+
+        # Render each POI with a normalized size
+        for (poi_fine_loc, distance, fire_count), radius in zip(top_pois, marker_radii):
+            fine_row, fine_col = poi_fine_loc
+
+            # Convert fine-grid to world coordinates
+            x = (fine_col + 0.5) * field.collision_discretization
+            y = (
+                field.grid_dimensions * field.world.cell_size
+                - (fine_row + 0.5) * field.collision_discretization
+            )
+
+            # Convert to pixel coordinates
+            px, py = self.world.world_to_pixel(x, y)
+
+            # Draw a marker circle
+            pygame.draw.circle(surface, MARKER_COLOR, (px, py), radius)
+
+        # Blit to display
+        self.world.display.blit(surface, (0, 0))
