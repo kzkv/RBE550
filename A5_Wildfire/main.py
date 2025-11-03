@@ -3,15 +3,13 @@
 # See Gen AI usage approach write-up in the report
 
 # Motion-plan for firetruck
-# TODO: persist roadmap for quick access between runs
-# TODO: collision checking for the R-S curves
 # TODO: drive toward the selected point; accel/decel
 # TODO: drive in forward and in reverse with different speeds
 # TODO: take into account the discrepancy between planning against body center and actual kinematics (pivot in the rear axle)
-# TODO: establish points of interest for the firetruck
 # TODO: drive toward the max interest point; take into account accel/decel
 # TODO: consider trajectory follower to avoid pauses between segments
 # TODO: tune the simulation
+# TODO: consider singularity points (an obstacle trap present in SEED = 41)
 
 # Performance profiling
 # TODO: run cpython profiling
