@@ -15,21 +15,22 @@ from field import Cell
 import reeds_shepp as rs
 import networkx as nx
 
-CONNECTOR_DENSITY = 0.1  # Fraction of empty cells to use as connectors
-MAX_PATH_SEARCH_LENGTH = 100.0  # Maximum path length to consider (meters)
+MAX_PATH_SEARCH_LENGTH = (
+    500.0  # Maximum path length to consider (meters); simple safeguard
+)
 
 FORCE_REBUILD_ROADMAP = False  # Set to True to force roadmap rebuild
 
 logger = logging.getLogger(__name__)
 
-INITIAL_HEADING = -math.pi
+INITIAL_HEADING = 0.0
 FIREFIGHTING_DURATION = 5.0  # Time to suppress fire after arrival or ignition
-MAX_POI_DISTANCE = 5
-NUM_HEADINGS = 8  # Headings per POI
+MAX_POI_DISTANCE = 15  # Max distance in cells for the POIs to get connected
+NUM_HEADINGS = 12  # Headings per POI
 
 COVERAGE_RADIUS_METERS = 10.0  # meters
-MAX_POI_COUNT = 200  # Maximum number of POIs to select
-POI_EXCLUSION_RADIUS_FINE = 50  # Fine cells - avoid clustering POIs too closely
+MAX_POI_COUNT = 120  # Maximum number of POIs to select
+POI_EXCLUSION_RADIUS_FINE_CELLS = 50  # Fine cells - avoid clustering POIs too closely
 
 TOP_CANDIDATES_COUNT = (
     20  # Number of POIs to select to be rendered (and considered for the goal)
@@ -102,12 +103,10 @@ class Firetruck:
             self.poses_by_location[loc].append(pose)
 
         # Build roadmap (with caching)
-        # self.roadmap = self._load_or_build_roadmap()
-        self.roadmap = None
+        self.roadmap = self._load_or_build_roadmap()
 
         # Pre-render the roadmap surface (immutable)
-        # self.roadmap_surface = self._create_roadmap_surface()
-        self.roadmap_surface = None
+        self.roadmap_surface = self._create_roadmap_surface()
 
         # Path planning state
         self.planned_path_segments = []  # List of PathSegment for the current path
@@ -350,9 +349,12 @@ class Firetruck:
             selected_fine_pois.append((fine_row, fine_col))
 
             # Apply an exclusion zone around this POI (in fine grid)
-            for dr in range(-POI_EXCLUSION_RADIUS_FINE, POI_EXCLUSION_RADIUS_FINE + 1):
+            for dr in range(
+                -POI_EXCLUSION_RADIUS_FINE_CELLS, POI_EXCLUSION_RADIUS_FINE_CELLS + 1
+            ):
                 for dc in range(
-                    -POI_EXCLUSION_RADIUS_FINE, POI_EXCLUSION_RADIUS_FINE + 1
+                    -POI_EXCLUSION_RADIUS_FINE_CELLS,
+                    POI_EXCLUSION_RADIUS_FINE_CELLS + 1,
                 ):
                     excl_row = fine_row + dr
                     excl_col = fine_col + dc
@@ -363,7 +365,7 @@ class Firetruck:
                         and 0 <= excl_col < field.fine_grid_size
                     ):
                         distance = np.sqrt(dr * dr + dc * dc)
-                        if distance <= POI_EXCLUSION_RADIUS_FINE:
+                        if distance <= POI_EXCLUSION_RADIUS_FINE_CELLS:
                             heatmap_working[excl_row, excl_col] = 0
 
         logger.info(
@@ -513,6 +515,7 @@ class Firetruck:
             "min_turning_radius": self.min_turning_radius,
             "max_poi_distance": MAX_POI_DISTANCE,
             "num_headings": NUM_HEADINGS,
+            "poi_exclusion_radius_fine_cells": POI_EXCLUSION_RADIUS_FINE_CELLS,
         }
 
         # Serialize and hash
@@ -570,7 +573,7 @@ class Firetruck:
             return roadmap
 
         # Cache miss - build the roadmap
-        logger.info("Building roadmap from scratch...")
+        logger.info("Building roadmap from scratch")
         roadmap = self._build_roadmap()
 
         # Save to cache for next time
@@ -586,7 +589,7 @@ class Firetruck:
         - Edges contain path waypoints, segments, and cost
         """
         start_time = time.time()
-        logger.info(f"Building roadmap with {len(self.poi_poses)} poses...")
+        logger.info(f"Building roadmap with {len(self.poi_poses)} poses")
 
         G = nx.DiGraph()
 
@@ -667,11 +670,48 @@ class Firetruck:
 
         return G
 
-    def plan_path_to_location(self, target_location: tuple[int, int]) -> bool:
+    def find_nearest_poi_to_location(
+        self, target_location: tuple[int, int]
+    ) -> Optional[Tuple[int, int]]:
+        """Find the nearest POI (fine-grid location) to the target coarse-grid location."""
+        if not self.poi_locations:
+            return None
+
+        field = self.world.field
+        cells_per_coarse = int(field.world.cell_size / field.collision_discretization)
+
+        # Convert target coarse location to fine grid
+        target_fine_row = target_location[0] * cells_per_coarse + cells_per_coarse // 2
+        target_fine_col = target_location[1] * cells_per_coarse + cells_per_coarse // 2
+
+        # Find nearest POI using Euclidean distance
+        min_distance = float("inf")
+        nearest_poi = None
+
+        for poi_loc in self.poi_locations:
+            poi_fine_row, poi_fine_col = poi_loc
+
+            # Calculate Euclidean distance in fine grid space
+            distance = math.sqrt(
+                (poi_fine_row - target_fine_row) ** 2
+                + (poi_fine_col - target_fine_col) ** 2
+            )
+
+            if distance < min_distance:
+                min_distance = distance
+                nearest_poi = poi_loc
+
+        logger.debug(
+            f"Found nearest POI at {nearest_poi} "
+            f"(distance: {min_distance * field.collision_discretization:.2f}m)"
+        )
+
+        return nearest_poi
+
+    def plan_path_to_poi(self, target_poi: Tuple[int, int]) -> bool:
         """
-        Plan a path from the current pose to a target grid location using the roadmap.
-        Finds the shortest path across all possible goal headings.
-        Returns True if a valid path was found, False otherwise.
+        Plan a path from the current pose to a target POI (fine-grid location).
+        Finds the shortest path across all possible goal headings at that POI.
         """
         if not self.roadmap:
             logger.warning("No roadmap available for path planning")
@@ -685,11 +725,11 @@ class Firetruck:
             )
             return False
 
-        # O(1) lookup of all goal poses at the target location
-        goal_poses = self.poses_by_location.get(target_location, [])
+        # Get all goal poses at the target POI location
+        goal_poses = [pose for pose in self.poi_poses if pose.location == target_poi]
 
         if not goal_poses:
-            logger.warning(f"Target location {target_location} is not in the roadmap")
+            logger.warning(f"Target POI {target_poi} has no poses in the roadmap")
             return False
 
         # Heuristic for A*: Euclidean distance between poses
@@ -697,9 +737,13 @@ class Firetruck:
             """Euclidean distance heuristic for A* in the roadmap"""
             return node_a.distance_to(node_b)
 
+        # Bias factor for reverse motion (1.0 = no bias, >1.0 = penalize reverse)
+        # TODO: the truck loves to drive in reverse for whatever reason
+        REVERSE_PENALTY_FACTOR = 1.1
+
         # Try to find paths to ALL goal poses and pick the shortest
         best_path = None
-        best_length = float("inf")
+        best_cost = float("inf")
 
         for goal_pose in goal_poses:
             try:
@@ -713,22 +757,30 @@ class Firetruck:
                     cutoff=MAX_PATH_SEARCH_LENGTH,
                 )
 
-                # Calculate total path length
-                path_length = sum(
-                    self.roadmap[path[i]][path[i + 1]]["weight"]
-                    for i in range(len(path) - 1)
-                )
+                # Calculate biased path cost (penalize reverse segments)
+                biased_cost = 0.0
+                for i in range(len(path) - 1):
+                    edge_data = self.roadmap[path[i]][path[i + 1]]
+                    segments = edge_data.get("segments", [])
 
-                # Keep track of the shortest path found
-                if path_length < best_length:
-                    best_length = path_length
+                    # Calculate cost with reverse penalty
+                    for segment in segments:
+                        segment_length = segment.start.distance_to(segment.end)
+                        if segment.is_forward:
+                            biased_cost += segment_length
+                        else:
+                            biased_cost += segment_length * REVERSE_PENALTY_FACTOR
+
+                # Keep track of the path with the lowest biased cost
+                if biased_cost < best_cost:
+                    best_cost = biased_cost
                     best_path = path
 
             except nx.NetworkXNoPath:
                 continue
 
         if not best_path:
-            logger.warning(f"No path found to {target_location}")
+            logger.warning(f"No path found to POI {target_poi}")
             return False
 
         # Extract segments from the best path
@@ -738,10 +790,20 @@ class Firetruck:
             segments = edge_data.get("segments", [])
             self.planned_path_segments.extend(segments)
 
+        # Calculate actual (unbiased) path length for logging
+        actual_length = sum(
+            seg.start.distance_to(seg.end) for seg in self.planned_path_segments
+        )
+
+        # Count forward vs reverse segments
+        forward_count = sum(1 for seg in self.planned_path_segments if seg.is_forward)
+        reverse_count = len(self.planned_path_segments) - forward_count
+
         logger.info(
-            f"Planned path to {target_location}: "
-            f"{len(self.planned_path_segments)} segments, "
-            f"length {best_length:.1f}m"
+            f"Planned path to POI {target_poi}: "
+            f"{len(self.planned_path_segments)} segments "
+            f"({forward_count} forward, {reverse_count} reverse), "
+            f"length {actual_length:.1f}m (biased cost: {best_cost:.1f})"
         )
         return True
 
@@ -876,7 +938,7 @@ class Firetruck:
 
         FORWARD_COLOR = (50, 220, 50)  # Green for forward
         REVERSE_COLOR = (220, 50, 220)  # Magenta for reverse
-        LINE_WIDTH = 3
+        LINE_WIDTH = 1
 
         # Group consecutive segments by direction for efficient rendering
         current_direction = None
