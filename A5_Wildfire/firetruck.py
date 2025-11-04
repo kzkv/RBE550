@@ -295,7 +295,7 @@ class Firetruck:
         dt = self.world.dt_world
 
         if self.planned_path_segments and not self.path_complete:
-            # Everything operates in rear-axle frame now
+            # Everything operates in the rear-axle frame now
             new_pose, new_index, complete = self.controller.update(
                 dt=dt,
                 current_pose=self.pos,  # Already rear axle
@@ -917,12 +917,12 @@ class Firetruck:
         rotated = pygame.transform.rotate(surf, math.degrees(self.pos.heading))
 
         # Calculate body center position from rear axle
-        # Body center is wheelbase/2 ahead of rear axle
+        # a Body center is wheelbase/2 ahead of rear axle
         center_offset = self.wheelbase / 2.0
         body_center_x = self.pos.x + center_offset * math.cos(self.pos.heading)
         body_center_y = self.pos.y + center_offset * math.sin(self.pos.heading)
 
-        # Convert to pixel coordinates and blit centered on body
+        # Convert to pixel coordinates and blit centered on the body
         px, py = self.world.world_to_pixel(body_center_x, body_center_y)
         rect = rotated.get_rect(center=(px, py))
         self.world.display.blit(rotated, rect.topleft)
@@ -1203,8 +1203,8 @@ class Firetruck:
 
 class VehicleController:
     """
-    Controls vehicle motion along a planned path with realistic acceleration,
-    deceleration, and speed management.
+    Simple trajectory executor for pre-planned kinematically possible paths.
+    Just plays back the trajectory with velocity control - no steering correction needed.
     """
 
     def __init__(
@@ -1216,15 +1216,6 @@ class VehicleController:
         max_deceleration: float,
         min_turning_radius: float,
     ):
-        """
-        Args:
-            wheelbase: Distance between front and rear axles (m)
-            max_velocity_forward: Maximum forward velocity (m/s)
-            max_velocity_reverse: Maximum reverse velocity (m/s) - should be positive
-            max_acceleration: Maximum acceleration (m/s^2)
-            max_deceleration: Maximum deceleration (m/s^2) - should be positive
-            min_turning_radius: Minimum turning radius (m)
-        """
         self.wheelbase = wheelbase
         self.max_velocity_forward = max_velocity_forward
         self.max_velocity_reverse = max_velocity_reverse
@@ -1233,14 +1224,32 @@ class VehicleController:
         self.min_turning_radius = min_turning_radius
 
         # Current state
-        self.current_velocity = 0.0  # Signed: positive = forward, negative = reverse
-        self.current_gear_forward = True  # Current intended direction
+        self.current_velocity = 0.0
+        self.distance_along_path = 0.0  # Track progress along a path
 
-        # Curve speed parameters
-        self.curve_speed_factor = 0.6  # Speed reduction factor for tight curves
-        self.tight_curve_threshold = (
-            1.5  # Curvature threshold (1/radius > this = tight)
-        )
+    def stop(self):
+        """Stop the vehicle"""
+        self.current_velocity = 0.0
+
+    def _calculate_target_velocity(
+        self, remaining_distance: float, is_forward: bool
+    ) -> float:
+        """
+        Calculate target velocity based on a direction and remaining distance.
+        """
+        # Base velocity for a direction
+        max_vel = self.max_velocity_forward if is_forward else self.max_velocity_reverse
+
+        # Deceleration zone near the end of a path
+        stopping_distance = 5.0  # meters
+        if remaining_distance < stopping_distance:
+            min_vel = 0.5  # m/s
+            target_vel = min_vel + (max_vel - min_vel) * (
+                remaining_distance / stopping_distance
+            )
+            return max(min_vel, min(target_vel, max_vel))
+
+        return max_vel
 
     def update(
         self,
@@ -1248,321 +1257,112 @@ class VehicleController:
         current_pose: Pos,
         path_segments: List[PathSegment],
         segment_index: int,
-    ) -> tuple[Pos, int, bool]:
+    ) -> Tuple[Pos, int, bool]:
         """
-        Update vehicle state and compute new pose following the path.
+        Execute the pre-planned path by interpolating along segments.
 
         Args:
-            dt: Time step (seconds)
+            dt: Time step
             current_pose: Current vehicle pose (rear axle)
             path_segments: List of path segments to follow
-            segment_index: Current segment index in the path
+            segment_index: Current segment index
 
         Returns:
-            tuple: (new_pose, new_segment_index, path_complete)
-                - new_pose: Updated vehicle pose
-                - new_segment_index: Updated segment index
-                - path_complete: True if path is complete
+            - new_pose: Updated vehicle pose
+            - new_segment_index: Updated segment index
+            - complete: True if a path following is complete
         """
         if not path_segments:
-            # No path to follow - stop
-            self.current_velocity = 0.0
+            return current_pose, 0, True
+
+        if segment_index >= len(path_segments):
             return current_pose, segment_index, True
 
-        # Check if we've reached the final goal
-        final_goal = path_segments[-1].end
-        distance_to_goal = current_pose.distance_to(final_goal)
+        # Get current segment
+        current_segment = path_segments[segment_index]
+        is_forward = current_segment.is_forward
 
-        # Completion threshold - vehicle is "close enough" to goal
-        COMPLETION_THRESHOLD = 0.1  # meters
-
-        if distance_to_goal < COMPLETION_THRESHOLD:
-            logger.info(f"Reached goal (distance: {distance_to_goal:.2f}m)")
-            self.current_velocity = 0.0
-            return current_pose, len(path_segments), True
-
-        # Safety check for segment index
-        if segment_index >= len(path_segments):
-            logger.warning(f"Segment index {segment_index} out of bounds, stopping")
-            self.current_velocity = 0.0
-            return current_pose, len(path_segments), True
-
-        # Get current segment for gear information
-        segment = path_segments[min(segment_index, len(path_segments) - 1)]
-        target_is_forward = segment.is_forward
-
-        # Check if we need to change gears
-        gear_change_needed = self.current_gear_forward != target_is_forward
-
-        # Handle gear changes with full stop
-        if gear_change_needed and abs(self.current_velocity) > 0.01:
-            # Need to stop before changing gears
-            self.current_velocity = self._apply_deceleration(self.current_velocity, dt)
-            return current_pose, segment_index, False
-
-        # Update gear if stopped
-        if abs(self.current_velocity) < 0.01:
-            self.current_gear_forward = target_is_forward
-
-        # Determine target velocity based on upcoming path curvature
-        target_velocity = self._compute_target_velocity(
-            path_segments, segment_index, target_is_forward
+        # Calculate the remaining path distance from the current segment onward
+        remaining_distance = sum(
+            seg.start.distance_to(seg.end) for seg in path_segments[segment_index:]
         )
 
-        # Apply acceleration/deceleration toward target velocity
-        self.current_velocity = self._adjust_velocity(
-            self.current_velocity, target_velocity, dt
+        # Determine target velocity
+        target_velocity = self._calculate_target_velocity(
+            remaining_distance, is_forward
         )
 
-        # Compute lookahead point for pure pursuit
-        lookahead_distance = self._compute_lookahead_distance()
-        lookahead_point, new_segment_index = self._find_lookahead_point(
-            current_pose, path_segments, segment_index, lookahead_distance
-        )
+        # Smooth velocity changes with acceleration limits
+        velocity_error = target_velocity - abs(self.current_velocity)
 
-        if lookahead_point is None:
-            # Can't find lookahead - just target the goal directly
-            lookahead_point = final_goal
-            new_segment_index = len(path_segments) - 1
-
-        # Compute steering angle using pure pursuit
-        steering_angle = self._compute_steering_angle(current_pose, lookahead_point)
-
-        # Integrate motion (correcting for rear-axle pivot)
-        new_pose = self._integrate_motion(current_pose, steering_angle, dt)
-
-        return new_pose, new_segment_index, False
-
-    def _compute_target_velocity(
-        self, path_segments: List[PathSegment], segment_index: int, is_forward: bool
-    ) -> float:
-        """
-        Compute target velocity based on upcoming path curvature and gear.
-        Looks ahead several segments to anticipate tight curves.
-        """
-        # Base velocity from gear
-        if is_forward:
-            base_velocity = self.max_velocity_forward
+        if velocity_error > 0:
+            max_delta_v = self.max_acceleration * dt
+            speed = abs(self.current_velocity) + min(velocity_error, max_delta_v)
         else:
-            base_velocity = -self.max_velocity_reverse
+            max_delta_v = self.max_deceleration * dt
+            speed = abs(self.current_velocity) + max(velocity_error, -max_delta_v)
 
-        # Look ahead to detect tight curves
-        lookahead_segments = 5
-        max_curvature = 0.0
+        # Apply direction
+        self.current_velocity = speed if is_forward else -speed
 
-        for i in range(
-            segment_index, min(segment_index + lookahead_segments, len(path_segments))
-        ):
-            segment = path_segments[i]
+        # Calculate distance to travel this timestep
+        distance_to_travel = abs(self.current_velocity) * dt
+        distance_remaining = distance_to_travel
 
-            # Compute curvature from heading change
-            heading_change = abs(segment.end.heading - segment.start.heading)
-            segment_length = segment.start.distance_to(segment.end)
+        # Traverse segments until we've used up our distance budget
+        new_segment_index = segment_index
+        new_pose = current_pose
 
-            if segment_length > 0.01:
-                curvature = heading_change / segment_length
-                max_curvature = max(max_curvature, curvature)
+        while distance_remaining > 1e-6 and new_segment_index < len(path_segments):
+            segment = path_segments[new_segment_index]
 
-        # Reduce speed for tight curves
-        if max_curvature > self.tight_curve_threshold:
-            speed_factor = self.curve_speed_factor
-        else:
-            # Smooth interpolation between full speed and reduced speed
-            t = min(max_curvature / self.tight_curve_threshold, 1.0)
-            speed_factor = 1.0 - t * (1.0 - self.curve_speed_factor)
+            # Distance from current pose to the segment end
+            segment_remaining = new_pose.distance_to(segment.end)
 
-        return base_velocity * speed_factor
+            if distance_remaining >= segment_remaining:
+                # Move to the end of this segment and continue to the next
+                new_pose = segment.end
+                distance_remaining -= segment_remaining
+                new_segment_index += 1
+            else:
+                # Interpolate along the current segment
+                if segment_remaining > 1e-6:
+                    t = distance_remaining / segment_remaining
 
-    def _adjust_velocity(self, current: float, target: float, dt: float) -> float:
-        """
-        Smoothly adjust velocity toward target using acceleration/deceleration limits.
-        """
-        error = target - current
+                    dx = segment.end.x - new_pose.x
+                    dy = segment.end.y - new_pose.y
+                    dh = segment.end.heading - new_pose.heading
 
-        if abs(error) < 0.01:
-            return target
+                    # Normalize heading difference
+                    while dh > math.pi:
+                        dh -= 2 * math.pi
+                    while dh < -math.pi:
+                        dh += 2 * math.pi
 
-        # Determine if we're accelerating or decelerating
-        if abs(target) > abs(current):
-            # Accelerating
-            max_change = self.max_acceleration * dt
-        else:
-            # Decelerating
-            max_change = self.max_deceleration * dt
+                    new_pose = Pos(
+                        x=new_pose.x + t * dx,
+                        y=new_pose.y + t * dy,
+                        heading=new_pose.heading + t * dh,
+                    )
 
-        # Clamp velocity change
-        if abs(error) < max_change:
-            return target
-        else:
-            return current + math.copysign(max_change, error)
+                break
 
-    def _apply_deceleration(self, velocity: float, dt: float) -> float:
-        """Apply deceleration to bring vehicle to a stop."""
-        if abs(velocity) < 0.01:
-            return 0.0
+        # Normalize the final heading
+        final_heading = new_pose.heading
+        while final_heading > math.pi:
+            final_heading -= 2 * math.pi
+        while final_heading < -math.pi:
+            final_heading += 2 * math.pi
 
-        decel_amount = self.max_deceleration * dt
-        if abs(velocity) < decel_amount:
-            return 0.0
+        new_pose = Pos(new_pose.x, new_pose.y, final_heading)
 
-        return velocity - math.copysign(decel_amount, velocity)
+        # Check if a path is complete
+        complete = new_segment_index >= len(path_segments)
 
-    def _compute_lookahead_distance(self) -> float:
-        """
-        Compute lookahead distance based on current velocity.
-        For large turning radius vehicles, lookahead must be proportional.
-        """
-        min_lookahead = 0.25
-        max_lookahead = 1.0
+        if not complete:
+            # Also check if we're very close to the final goal and moving slowly
+            final_distance = new_pose.distance_to(path_segments[-1].end)
+            if final_distance < 0.1 and abs(self.current_velocity) < 0.5:
+                complete = True
 
-        speed = abs(self.current_velocity)
-        max_speed = max(self.max_velocity_forward, self.max_velocity_reverse)
-
-        if max_speed < 0.01:
-            return min_lookahead
-
-        t = min(speed / max_speed, 1.0)
-        return min_lookahead + t * (max_lookahead - min_lookahead)
-
-    def _find_lookahead_point(
-        self,
-        current_pose: Pos,
-        path_segments: List[PathSegment],
-        segment_index: int,
-        lookahead_distance: float,
-    ) -> tuple[Optional[Pos], int]:
-        """
-        Find lookahead point along the path at the specified distance ahead.
-        Returns (lookahead_pose, segment_index) or (None, segment_index) if at end.
-        """
-        if not path_segments:
-            return None, segment_index
-
-        # Start from current position and walk along the path
-        accumulated_distance = 0.0
-        search_pose = current_pose
-
-        for i in range(segment_index, len(path_segments)):
-            segment = path_segments[i]
-
-            # Distance from current search position to segment end
-            distance_to_end = search_pose.distance_to(segment.end)
-
-            if accumulated_distance + distance_to_end >= lookahead_distance:
-                # Lookahead point is somewhere between search_pose and segment.end
-                remaining_distance = lookahead_distance - accumulated_distance
-
-                # Interpolate
-                if distance_to_end > 0.01:
-                    t = remaining_distance / distance_to_end
-                    t = max(0.0, min(1.0, t))  # Clamp to [0, 1]
-                else:
-                    t = 0.0
-
-                x = search_pose.x + t * (segment.end.x - search_pose.x)
-                y = search_pose.y + t * (segment.end.y - search_pose.y)
-                heading = search_pose.heading + t * (
-                    segment.end.heading - search_pose.heading
-                )
-
-                # Normalize heading
-                heading = math.atan2(math.sin(heading), math.cos(heading))
-
-                return Pos(x, y, heading), i
-
-            # Move to next segment
-            accumulated_distance += distance_to_end
-            search_pose = segment.end
-
-        # Reached the end - return final goal
-        return path_segments[-1].end, len(path_segments) - 1
-
-    def _compute_steering_angle(self, current_pose: Pos, lookahead_point: Pos) -> float:
-        """
-        Compute steering angle using pure pursuit algorithm.
-        Accounts for rear-axle pivot point.
-        """
-        # Vector from current position to lookahead point
-        dx = lookahead_point.x - current_pose.x
-        dy = lookahead_point.y - current_pose.y
-
-        # Transform to vehicle frame (rear axle as origin)
-        cos_heading = math.cos(current_pose.heading)
-        sin_heading = math.sin(current_pose.heading)
-
-        local_x = dx * cos_heading + dy * sin_heading
-        local_y = -dx * sin_heading + dy * cos_heading
-
-        # Pure pursuit: compute curvature to reach lookahead point
-        lookahead_dist = math.sqrt(dx * dx + dy * dy)
-
-        if lookahead_dist < 0.1:
-            return 0.0
-
-        # Curvature = 2 * sin(alpha) / L, where alpha is angle to lookahead
-        # and L is lookahead distance
-        alpha = math.atan2(local_y, local_x)
-        curvature = 2.0 * math.sin(alpha) / lookahead_dist
-
-        # Convert curvature to steering angle using Ackermann geometry
-        # tan(delta) = L * curvature (L = wheelbase)
-        steering_angle = math.atan(self.wheelbase * curvature)
-
-        # Clamp to physical steering limits
-        max_steering = math.atan(self.wheelbase / self.min_turning_radius)
-        steering_angle = max(-max_steering, min(steering_angle, max_steering))
-
-        return steering_angle
-
-    def _integrate_motion(self, pose: Pos, steering_angle: float, dt: float) -> Pos:
-        """
-        Integrate vehicle motion using rear-axle bicycle model.
-
-        This correctly handles the fact that the vehicle pivots about the rear axle,
-        not the body center. The pose represents the rear axle position.
-        """
-        # Distance traveled by rear axle
-        distance = self.current_velocity * dt
-
-        if abs(steering_angle) < 0.001:
-            # Straight line motion
-            new_x = pose.x + distance * math.cos(pose.heading)
-            new_y = pose.y + distance * math.sin(pose.heading)
-            new_heading = pose.heading
-        else:
-            # Circular arc motion
-            # Turning radius at rear axle
-            turning_radius = self.wheelbase / math.tan(steering_angle)
-
-            # Angular velocity
-            angular_velocity = self.current_velocity / turning_radius
-
-            # Heading change
-            delta_heading = angular_velocity * dt
-
-            # Arc motion (instantaneous center of rotation)
-            cos_h = math.cos(pose.heading)
-            sin_h = math.sin(pose.heading)
-
-            # Center of circular arc
-            cx = pose.x - turning_radius * sin_h
-            cy = pose.y + turning_radius * cos_h
-
-            # New heading
-            new_heading = pose.heading + delta_heading
-
-            # Normalize heading to [-pi, pi]
-            new_heading = math.atan2(math.sin(new_heading), math.cos(new_heading))
-
-            # New position on arc
-            cos_new_h = math.cos(new_heading)
-            sin_new_h = math.sin(new_heading)
-
-            new_x = cx + turning_radius * sin_new_h
-            new_y = cy - turning_radius * cos_new_h
-
-        return Pos(new_x, new_y, new_heading)
-
-    def stop(self):
-        """Immediately stop the vehicle (emergency stop)."""
-        self.current_velocity = 0.0
+        return new_pose, new_segment_index, complete

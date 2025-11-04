@@ -3,17 +3,16 @@
 # See Gen AI usage approach write-up in the report
 
 # Motion-plan for firetruck
-# TODO: drive toward the selected point; accel/decel
-# TODO: drive in forward and in reverse with different speeds
-# TODO: take into account the discrepancy between planning against body center and actual kinematics (pivot in the rear axle)
-# TODO: drive toward the max interest point; take into account accel/decel
-# TODO: consider trajectory follower to avoid pauses between segments
+# TODO: drive toward the max interest point
 # TODO: tune the simulation
-# TODO: consider singularity points (an obstacle trap present in SEED = 41)
 
 # Performance profiling
 # TODO: run cpython profiling
 # TODO: see if in-run profiling is necessary
+
+# If I had more time
+# TODO: consider singularity points (an obstacle trap present in SEED = 41)
+# TODO: roadmap failsafe -> drive to the nearest POI if lost
 
 # Report:
 # Pos vs location (discrete vs continuous)
@@ -38,7 +37,7 @@ pygame.display.set_caption("Wildfire")
 
 # SEED = 67
 SEED = 41
-TIME_SPEED = 1.0  # Time speed coefficient
+TIME_SPEED = 10.0  # Time speed coefficient
 PAR_TIME = 3600.0
 
 WUMPUS_ROWS = (0, 10)
