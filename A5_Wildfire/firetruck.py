@@ -313,26 +313,50 @@ class Firetruck:
         self._suppress_fires()
 
     def _suppress_fires(self):
-        """Suppress fires in adjacent cells after sufficient firefighting time"""
+        """Suppress fires within COVERAGE_RADIUS_METERS after sufficient firefighting time"""
         current_time = self.world.world_time
-        neighbors = self.world.field.get_cell_neighbors(self.location)
+        field = self.world.field
 
-        # Filter for burning neighbors
-        burning_neighbors = [
-            pos
-            for pos in neighbors
-            if self.world.field.get_cell(pos[0], pos[1]) == Cell.BURNING
-        ]
+        # Get all cells within the coverage radius from the rear axle position
+        coverage_radius_coarse = int(
+            np.ceil(COVERAGE_RADIUS_METERS / field.world.cell_size)
+        )
+
+        truck_row, truck_col = self.get_location()
+
+        # Find all burning cells within a radius
+        burning_in_range = []
+
+        for dr in range(-coverage_radius_coarse - 1, coverage_radius_coarse + 2):
+            for dc in range(-coverage_radius_coarse - 1, coverage_radius_coarse + 2):
+                cell_row = truck_row + dr
+                cell_col = truck_col + dc
+
+                # Check bounds
+                if not field.in_bounds(cell_row, cell_col):
+                    continue
+
+                # Check if burning
+                if field.get_cell(cell_row, cell_col) != Cell.BURNING:
+                    continue
+
+                # Check Euclidean distance in meters (from rear axle to a cell center)
+                dx = dc * field.world.cell_size
+                dy = dr * field.world.cell_size
+                dist = math.sqrt(dx * dx + dy * dy)
+
+                if dist <= COVERAGE_RADIUS_METERS:
+                    burning_in_range.append((cell_row, cell_col))
 
         # Suppress fires that have been burning for at least FIREFIGHTING_DURATION
         # since the latter of: truck arrival or fire ignition
         suppressed_count = 0
-        for pos in burning_neighbors:
-            ignition_time = self.world.field.ignition_times.get(pos, current_time)
+        for pos in burning_in_range:
+            ignition_time = field.ignition_times.get(pos, current_time)
             firefighting_start = max(self.location_arrival, ignition_time)
 
             if current_time >= firefighting_start + FIREFIGHTING_DURATION:
-                if self.world.field.suppress(pos[0], pos[1]):
+                if field.suppress(pos[0], pos[1]):
                     suppressed_count += 1
 
         if suppressed_count > 0:
