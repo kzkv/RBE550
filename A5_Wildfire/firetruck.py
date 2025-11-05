@@ -68,13 +68,11 @@ class Firetruck:
     ):
         self.world = world
 
-        # Initialize position - self.pos now represents REAR AXLE
+        # Initialize position; self.pos represents rear axle
         initial_location = self.world.field.initialize_location(
             preset_rows, preset_cols
         )
         self.pos = self._grid_to_pose(initial_location, INITIAL_HEADING)
-        self.location = initial_location
-        self.location_arrival = 0.0
 
         # Truck specifications
         self.length = 4.9  # m
@@ -107,16 +105,6 @@ class Firetruck:
         # Precompute which fine-grid cells each POI can reach
         self.poi_coverage_map = self._precompute_poi_coverage()
 
-        # Build location-indexed dictionary for O(1) lookup
-        # This is a significant speed-up for the A* path finding
-        # TODO: this will be removed, as POIs are no longer location-bound
-        self.poses_by_location = {}
-        for pose in self.poi_poses:
-            loc = pose.location
-            if loc not in self.poses_by_location:
-                self.poses_by_location[loc] = []
-            self.poses_by_location[loc].append(pose)
-
         # Build roadmap (with caching)
         self.roadmap = self._load_or_build_roadmap()
 
@@ -125,6 +113,8 @@ class Firetruck:
 
         # Path planning state
         self.planned_path_segments = []  # List of PathSegment for the current path
+        self.current_target_poi = None  # Current target POI location
+        self.poi_arrival_time = None  # Time when truck arrived at current POI
 
     def _grid_to_pose(self, grid_pos: tuple[int, int], heading: float) -> Pos:
         """Convert the grid location to a Pos with heading"""
@@ -135,12 +125,24 @@ class Firetruck:
     def set_pose(self, pos: Pos):
         """Set the firetruck pose"""
         self.pos = pos
-        old_location = self.location
-        self.location = self.world.world_to_grid(pos.x, pos.y)
 
-        # Reset presence timer if moved to a new cell
-        if old_location != self.location:
-            self.location_arrival = self.world.world_time
+        # Check if we arrived at the target POI
+        if self.current_target_poi is not None and self.poi_arrival_time is None:
+            # Convert the current position to coarse grid to check arrival
+            current_coarse = self.world.world_to_grid(pos.x, pos.y)
+
+            # Convert target POI (fine grid) to coarse grid
+            cells_per_coarse = int(
+                self.world.field.world.cell_size
+                / self.world.field.collision_discretization
+            )
+            poi_coarse_row = self.current_target_poi[0] // cells_per_coarse
+            poi_coarse_col = self.current_target_poi[1] // cells_per_coarse
+
+            # If we're at the POI's coarse grid location, mark arrival
+            if current_coarse == (poi_coarse_row, poi_coarse_col):
+                self.poi_arrival_time = self.world.world_time
+                logger.info(f"Arrived at POI {self.current_target_poi}")
 
     def _compute_reeds_shepp_path(
         self,
@@ -288,13 +290,25 @@ class Firetruck:
 
     def get_location(self) -> tuple[int, int]:
         """Get the current grid location as (row, col)"""
-        return int(self.location[0]), int(self.location[1])
+        return self.world.world_to_grid(self.pos.x, self.pos.y)
 
     def update(self):
         """Update the firetruck state"""
         dt = self.world.dt_world
 
+        # Check if we need to select a new goal
+        if self.path_complete or not self.planned_path_segments:
+            self._update_goal()
+
         if self.planned_path_segments and not self.path_complete:
+            # Check if we should stay at current POI for minimum duration
+            if self.poi_arrival_time is not None:
+                time_at_poi = self.world.world_time - self.poi_arrival_time
+                if time_at_poi < FIREFIGHTING_DURATION:
+                    # Stay put and suppress fires
+                    self._suppress_fires()
+                    return
+
             # Everything operates in the rear-axle frame now
             new_pose, new_index, complete = self.controller.update(
                 dt=dt,
@@ -309,20 +323,73 @@ class Firetruck:
 
             if complete:
                 logger.info("Path following complete")
+                # Mark that we've arrived at the POI
+                if self.poi_arrival_time is None:
+                    self.poi_arrival_time = self.world.world_time
 
         self._suppress_fires()
+
+    def _update_goal(self):
+        """Automatically select and navigate to the highest priority accessible POI"""
+        # Get ranked POIs by priority
+        ranked_pois = self.rank_pois_by_priority()
+
+        if not ranked_pois:
+            # No fires to fight
+            return
+
+        # Try to plan a path to POIs in priority order
+        for poi_loc, distance, fire_count in ranked_pois:
+            # Skip if this is our current target and we haven't stayed long enough
+            if self.current_target_poi == poi_loc:
+                if self.poi_arrival_time is not None:
+                    time_at_poi = self.world.world_time - self.poi_arrival_time
+                    if time_at_poi < FIREFIGHTING_DURATION:
+                        # Still need to stay here
+                        logger.debug(
+                            f"Staying at current POI {poi_loc} "
+                            f"({time_at_poi:.1f}s / {FIREFIGHTING_DURATION}s)"
+                        )
+                        return
+
+            # Try to plan a path to this POI
+            if self.plan_path_to_poi(poi_loc):
+                # Successfully planned path
+                self.current_target_poi = poi_loc
+                self.poi_arrival_time = None  # Reset arrival time
+                logger.info(
+                    f"Navigating to POI {poi_loc} (priority: {fire_count} fires, "
+                    f"distance: {distance * self.world.field.collision_discretization:.1f}m)"
+                )
+                return
+            else:
+                logger.debug(f"Could not find path to POI {poi_loc}, trying next...")
+
+        # No accessible POIs found
+        logger.warning("No accessible POIs found in priority list")
+        self.current_target_poi = None
+        self.poi_arrival_time = None
 
     def _suppress_fires(self):
         """Suppress fires within COVERAGE_RADIUS_METERS after sufficient firefighting time"""
         current_time = self.world.world_time
         field = self.world.field
 
+        # Only suppress if we're at a POI and have been there for the minimum duration
+        if self.poi_arrival_time is None:
+            return
+
+        time_at_poi = current_time - self.poi_arrival_time
+        if time_at_poi < FIREFIGHTING_DURATION:
+            return
+
         # Get all cells within the coverage radius from the rear axle position
         coverage_radius_coarse = int(
             np.ceil(COVERAGE_RADIUS_METERS / field.world.cell_size)
         )
 
-        truck_row, truck_col = self.get_location()
+        # Get current location from continuous pose
+        truck_row, truck_col = self.world.world_to_grid(self.pos.x, self.pos.y)
 
         # Find all burning cells within a radius
         burning_in_range = []
@@ -348,19 +415,23 @@ class Firetruck:
                 if dist <= COVERAGE_RADIUS_METERS:
                     burning_in_range.append((cell_row, cell_col))
 
-        # Suppress fires that have been burning for at least FIREFIGHTING_DURATION
-        # since the latter of: truck arrival or fire ignition
+        # Suppress all fires in range (they've been exposed to firefighting long enough)
         suppressed_count = 0
         for pos in burning_in_range:
+            # Check when this specific fire ignited
             ignition_time = field.ignition_times.get(pos, current_time)
-            firefighting_start = max(self.location_arrival, ignition_time)
 
-            if current_time >= firefighting_start + FIREFIGHTING_DURATION:
+            # Fire must have been burning since we arrived (or before)
+            # and we've been here for FIREFIGHTING_DURATION
+            if ignition_time <= self.poi_arrival_time + FIREFIGHTING_DURATION:
                 if field.suppress(pos[0], pos[1]):
                     suppressed_count += 1
 
         if suppressed_count > 0:
-            logger.debug(f"Firetruck suppressed {suppressed_count} fire(s)")
+            logger.debug(
+                f"Firetruck suppressed {suppressed_count} fire(s) "
+                f"after {time_at_poi:.1f}s at POI"
+            )
 
     def _collect_poi_locations(self, origin: Tuple[int, int]) -> List[Tuple[int, int]]:
         """
@@ -904,6 +975,8 @@ class Firetruck:
         self.planned_path_segments = []
         self.current_segment_index = 0
         self.path_complete = True
+        self.current_target_poi = None
+        self.poi_arrival_time = None
         self.controller.stop()
 
     # Rendering methods
@@ -1139,10 +1212,14 @@ class Firetruck:
         if self.planned_path_segments:
             return
 
-        # Convert truck's coarse-grid location to fine-grid
+        # Convert a firetruck's current pose to fine-grid
         field = self.world.field
         cells_per_coarse = int(field.world.cell_size / field.collision_discretization)
-        truck_row, truck_col = self.get_location()
+
+        # Get coarse location from continuous pose
+        truck_coarse = self.world.world_to_grid(self.pos.x, self.pos.y)
+        truck_row, truck_col = truck_coarse
+
         truck_fine_row = truck_row * cells_per_coarse + cells_per_coarse // 2
         truck_fine_col = truck_col * cells_per_coarse + cells_per_coarse // 2
 
