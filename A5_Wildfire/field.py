@@ -106,7 +106,10 @@ class Field:
         # TODO: break circular dependency and use encapsulated firetruck object
         firetruck_length = 4.9
         firetruck_width = 2.2
-        firetruck_half_diagonal = math.hypot(firetruck_length / 2, firetruck_width / 2)
+        firetruck_wheelbase = 3.0
+        firetruck_half_diagonal = math.hypot(
+            firetruck_length / 2 + firetruck_wheelbase / 2, firetruck_width / 2
+        )
 
         # Inflate by half-diagonal (worst-case corner distance)
         inflation_radius = firetruck_half_diagonal
