@@ -16,7 +16,7 @@ import reeds_shepp as rs
 import networkx as nx
 
 MAX_PATH_SEARCH_LENGTH = (
-    500.0  # Maximum path length to consider (meters); simple safeguard
+    1000.0  # Maximum path length to consider (meters); simple safeguard
 )
 
 FORCE_REBUILD_ROADMAP = False  # Set to True to force roadmap rebuild
@@ -25,16 +25,14 @@ logger = logging.getLogger(__name__)
 
 INITIAL_HEADING = math.pi / 2
 FIREFIGHTING_DURATION = 5.0  # Time to suppress fire after arrival or ignition
-MAX_POI_DISTANCE = 15  # Max distance in cells for the POIs to get connected
+MAX_POI_DISTANCE = 20  # Max distance in cells for the POIs to get connected
 NUM_HEADINGS = 12  # Headings per POI
 
 COVERAGE_RADIUS_METERS = 10.0  # meters
-MAX_POI_COUNT = 120  # Maximum number of POIs to select
+MAX_POI_COUNT = 150  # Maximum number of POIs to select
 POI_EXCLUSION_RADIUS_FINE_CELLS = 50  # Fine cells - avoid clustering POIs too closely
 
-TOP_CANDIDATES_COUNT = (
-    20  # Number of POIs to select to be rendered (and considered for the goal)
-)
+TOP_CANDIDATES_COUNT = 10  # Number of POIs to select to be rendered
 
 # Performance-critical constants for _integrate_path_step (called 26M+ times during roadmap building)
 # Hardcoded to avoid repeated math.pi lookups and calculations
@@ -456,7 +454,9 @@ class Firetruck:
         iterations = 0
         max_iterations = MAX_POI_COUNT * 10  # Safety limit to prevent infinite loops
 
-        while len(selected_fine_pois) < MAX_POI_COUNT and iterations < max_iterations:
+        while (
+            len(selected_fine_pois) < MAX_POI_COUNT - 1 and iterations < max_iterations
+        ):
             iterations += 1
 
             # Find the cell with maximum coverage
@@ -494,10 +494,6 @@ class Firetruck:
                         distance = np.sqrt(dr * dr + dc * dc)
                         if distance <= POI_EXCLUSION_RADIUS_FINE_CELLS:
                             heatmap_working[excl_row, excl_col] = 0
-
-        logger.info(
-            f"Selected {len(selected_fine_pois)} fine-grid POIs after {iterations} iterations"
-        )
 
         # Convert fine-grid origin to fine-grid coordinates if provided
         if origin is not None:
@@ -782,7 +778,7 @@ class Firetruck:
             # Progress logging
             if (i + 1) % 100 == 0:
                 elapsed = time.time() - start_time
-                logger.debug(
+                logger.info(
                     f"Processed {i + 1}/{len(self.poi_poses)} poses, "
                     f"{edge_count} edges, {collision_count} collisions "
                     f"(elapsed: {elapsed:.1f}s)"
