@@ -38,6 +38,7 @@ class World:
         self.time_speed = time_speed
         self.world_time = 0.0  # World time in seconds
         self.dt_world = 0.0  # Delta time in seconds
+        self.is_paused = False  # Pause simulation during heavy computation
 
         self.field = Field(seed, self.grid_dimensions, OBSTACLE_DENSITY, world=self)
         self.wumpus = None
@@ -108,9 +109,21 @@ class World:
     def update(self):
         """Update world state with delta time adjusted for the multiplier"""
         dt_real = self.clock.tick(60) / 1000.0  # seconds (60 FPS)
-        dt_world = dt_real * self.time_speed
-        self.world_time += dt_world
-        self.dt_world = dt_world  # Store for use by other components
+
+        if self.is_paused:
+            self.dt_world = 0.0
+        else:
+            dt_world = dt_real * self.time_speed
+            self.world_time += dt_world
+            self.dt_world = dt_world  # Store for use by other components
+
+    def pause_simulation(self):
+        """Pause simulation time (during heavy computation)"""
+        self.is_paused = True
+
+    def resume_simulation(self):
+        """Resume simulation time"""
+        self.is_paused = False
 
     # Rendering
     def clear(self):
@@ -184,8 +197,22 @@ class World:
         firetruck_location = self.firetruck.get_location()
         locations_str = f"WU: {wumpus_location} FT: {firetruck_location}"
 
+        # Pause indication
+        pause_str = "PAUSED" if self.is_paused else ""
+
         text = " | ".join(
-            [s for s in [score_str, time_str, tally_str, locations_str, message] if s]
+            [
+                s
+                for s in [
+                    score_str,
+                    time_str,
+                    tally_str,
+                    locations_str,
+                    pause_str,
+                    message,
+                ]
+                if s
+            ]
         )
 
         img = self.font.render(text, True, HUD_FONT_COLOR)

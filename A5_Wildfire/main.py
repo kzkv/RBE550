@@ -28,6 +28,7 @@ from wumpus import Wumpus
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+DEBUG = False
 
 rng = np.random.default_rng()
 
@@ -71,26 +72,34 @@ while running:
         world.render_hud(message="Time's up!")
         continue
 
+    # Compute changes, set goals, update actors
+    world.pause_simulation()
+    wumpus.update()
+    wumpus.set_goal_auto()
+    firetruck.update()
+    world.resume_simulation()
+
+    # Handle world state changes and rendering
     world.update()
     world.field.update_burning_cells()
     world.clear()
     world.render_field()
-    # world.field.render_collision_overlay()
+    if DEBUG:
+        world.field.render_collision_overlay()
     world.render_spread()
     world.render_hud()
 
-    # firetruck.render_roadmap()
-
-    wumpus.update()
+    # Handle Wumpus
     wumpus.render_priority_heatmap()
     wumpus.move()
     wumpus.render_path()
     wumpus.render()
-    wumpus.set_goal_auto()
 
-    # firetruck.render_poi_locations()
+    # Handle Firetruck
+    if DEBUG:
+        firetruck.render_roadmap()
+        firetruck.render_poi_locations()
     firetruck.render_top_priority_pois()
-    firetruck.update()
     firetruck.render_coverage_radius()
     firetruck.render_planned_path()
     firetruck.render()
