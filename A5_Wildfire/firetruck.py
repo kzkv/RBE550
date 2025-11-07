@@ -29,7 +29,7 @@ MAX_POI_DISTANCE = 20  # Max distance in cells for the POIs to get connected
 NUM_HEADINGS = 12  # Headings per POI
 
 COVERAGE_RADIUS_METERS = 10.0  # meters
-MAX_POI_COUNT = 150  # Maximum number of POIs to select
+MAX_POI_COUNT = 120  # Maximum number of POIs to select
 POI_EXCLUSION_RADIUS_FINE_CELLS = 50  # Fine cells - avoid clustering POIs too closely
 
 TOP_CANDIDATES_COUNT = 10  # Number of POIs to select to be rendered
@@ -64,14 +64,6 @@ class Firetruck:
     def __init__(
         self, world: "World", preset_rows: tuple[int, int], preset_cols: tuple[int, int]
     ):
-        self.world = world
-
-        # Initialize position; self.pos represents rear axle
-        initial_location = self.world.field.initialize_location(
-            preset_rows, preset_cols
-        )
-        self.pos = self._grid_to_pose(initial_location, INITIAL_HEADING)
-
         # Truck specifications
         self.length = 4.9  # m
         self.width = 2.2  # m
@@ -81,6 +73,57 @@ class Firetruck:
         self.max_velocity_reverse = 5.0  # m/s
         self.max_acceleration = 2.0  # m/s^2
         self.max_deceleration = 3.0  # m/s^2
+
+        self.world = world
+
+        # Store the preset quadrant for later
+        self.preset_rows = preset_rows
+        self.preset_cols = preset_cols
+
+        # Generate POIs first (without initial location)
+        self.poi_fine_locations = self._collect_poi_fine_locations(origin=None)
+        self.poi_poses = self._collect_poi_poses()
+
+        # Precompute which fine-grid cells each POI can reach
+        self.poi_coverage_map = self._precompute_poi_coverage()
+
+        # Build roadmap (with caching)
+        self.roadmap = self._load_or_build_roadmap()
+
+        # Filter to keep only connected poses
+        roadmap_nodes = set(self.roadmap.nodes())
+        self.poi_poses = [pose for pose in self.poi_poses if pose in roadmap_nodes]
+
+        # Update poi_fine_locations to match
+        poi_fine_locations_in_roadmap = set(
+            pose.fine_location for pose in self.poi_poses
+        )
+        self.poi_fine_locations = [
+            loc
+            for loc in self.poi_fine_locations
+            if loc in poi_fine_locations_in_roadmap
+        ]
+
+        # Update the coverage map to only include connected locations
+        self.poi_coverage_map = {
+            loc: coverage
+            for loc, coverage in self.poi_coverage_map.items()
+            if loc in poi_fine_locations_in_roadmap
+        }
+
+        # Now place the truck at a random connected pose in the specified quadrant
+        self.pos = self._select_initial_pose_in_quadrant(preset_rows, preset_cols)
+
+        if self.pos is None:
+            raise ValueError(
+                f"No valid connected POI poses found in quadrant "
+                f"rows={preset_rows}, cols={preset_cols}"
+            )
+
+        logger.info(
+            f"Firetruck placed at ({self.pos.x:.1f}, {self.pos.y:.1f}) "
+            f"with heading {math.degrees(self.pos.heading):.1f}°"
+        )
 
         # Initialize vehicle controller
         self.controller = VehicleController(
@@ -96,23 +139,13 @@ class Firetruck:
         self.current_segment_index = 0
         self.path_complete = True
 
-        # Generate points of interest for motion planning
-        self.poi_locations = self._collect_poi_locations(origin=initial_location)
-        self.poi_poses = self._collect_poi_poses()
-
-        # Precompute which fine-grid cells each POI can reach
-        self.poi_coverage_map = self._precompute_poi_coverage()
-
-        # Build roadmap (with caching)
-        self.roadmap = self._load_or_build_roadmap()
-
         # Pre-render the roadmap surface (immutable)
         self.roadmap_surface = self._create_roadmap_surface()
 
         # Path planning state
-        self.planned_path_segments = []  # List of PathSegment for the current path
-        self.current_target_poi = None  # Current target POI location
-        self.poi_arrival_time = None  # Time when truck arrived at current POI
+        self.planned_path_segments = []
+        self.current_target_poi = None
+        self.poi_arrival_time = None
 
     def _grid_to_pose(self, grid_pos: tuple[int, int], heading: float) -> Pos:
         """Convert the grid location to a Pos with heading"""
@@ -290,6 +323,39 @@ class Firetruck:
         """Get the current grid location as (row, col)"""
         return self.world.world_to_grid(self.pos.x, self.pos.y)
 
+    def _select_initial_pose_in_quadrant(
+        self, preset_rows: tuple[int, int], preset_cols: tuple[int, int]
+    ) -> Optional[Pos]:
+        """
+        Select a random connected pose from the roadmap that falls within
+        the specified quadrant (in coarse grid coordinates).
+        """
+        min_row, max_row = preset_rows
+        min_col, max_col = preset_cols
+
+        # Filter poses that fall within the quadrant
+        candidates = []
+        for pose in self.poi_poses:
+            coarse_row, coarse_col = self.world.world_to_grid(pose.x, pose.y)
+            if min_row <= coarse_row <= max_row and min_col <= coarse_col <= max_col:
+                candidates.append(pose)
+
+        if not candidates:
+            logger.warning(
+                f"No connected poses found in quadrant "
+                f"rows=[{min_row}, {max_row}], cols=[{min_col}, {max_col}]"
+            )
+            return None
+
+        # Randomly select one
+        selected = self.world.field.rng.choice(candidates)
+
+        logger.info(
+            f"Selected initial pose from {len(candidates)} candidates in quadrant"
+        )
+
+        return selected
+
     def update(self):
         """Update the firetruck state"""
         dt = self.world.dt_world
@@ -431,14 +497,14 @@ class Firetruck:
                 f"after {time_at_poi:.1f}s at POI"
             )
 
-    def _collect_poi_locations(self, origin: Tuple[int, int]) -> List[Tuple[int, int]]:
+    def _collect_poi_fine_locations(
+        self, origin: Optional[Tuple[int, int]] = None
+    ) -> List[Tuple[int, int]]:
         """
         Collect points of interest for motion planning using a fine-grid coverage heatmap.
         POIs are selected from passable fine-grid cells that cover the most obstacles,
         with an exclusion radius to avoid clustering.
         Continues until MAX_POI_COUNT unique POIs are collected.
-
-        Returns a list of fine-grid locations (row, col) for POIs
         """
         field = self.world.field
 
@@ -448,22 +514,23 @@ class Firetruck:
         # Create a working copy for exclusion zones
         heatmap_working = heatmap.copy()
 
-        selected_fine_pois = []  # List of (fine_row, fine_col) tuples
+        selected_fine_pois = []
 
         # Greedy selection: iteratively pick the best remaining position
         iterations = 0
-        max_iterations = MAX_POI_COUNT * 10  # Safety limit to prevent infinite loops
+        max_iterations = MAX_POI_COUNT * 10
 
-        while (
-            len(selected_fine_pois) < MAX_POI_COUNT - 1 and iterations < max_iterations
-        ):
+        # Adjust the target count based on whether we're adding origin later
+        target_count = MAX_POI_COUNT if origin is None else MAX_POI_COUNT - 1
+
+        while len(selected_fine_pois) < target_count and iterations < max_iterations:
             iterations += 1
 
             # Find the cell with maximum coverage
             max_coverage = heatmap_working.max()
 
             if max_coverage == 0:
-                break  # No more viable POIs
+                break
 
             # Get all cells with max coverage
             max_indices = np.argwhere(heatmap_working == max_coverage)
@@ -495,7 +562,7 @@ class Firetruck:
                         if distance <= POI_EXCLUSION_RADIUS_FINE_CELLS:
                             heatmap_working[excl_row, excl_col] = 0
 
-        # Convert fine-grid origin to fine-grid coordinates if provided
+        # Optionally add origin
         if origin is not None:
             cells_per_coarse = int(
                 field.world.cell_size / field.collision_discretization
@@ -504,11 +571,10 @@ class Firetruck:
             origin_fine_col = origin[1] * cells_per_coarse + cells_per_coarse // 2
             origin_fine = (origin_fine_row, origin_fine_col)
 
-            # Add origin if not already covered by a nearby POI
             if origin_fine not in selected_fine_pois:
                 selected_fine_pois.append(origin_fine)
 
-        logger.info(f"Final POI count: {len(selected_fine_pois)} fine-grid locations")
+        logger.info(f"Collected {len(selected_fine_pois)} POI fine-grid locations")
 
         return selected_fine_pois
 
@@ -520,7 +586,7 @@ class Firetruck:
         poses = []
         field = self.world.field
 
-        for fine_row, fine_col in self.poi_locations:
+        for fine_row, fine_col in self.poi_fine_locations:
             # Convert fine-grid to world coordinates
             x = (fine_col + 0.5) * field.collision_discretization
             y = (
@@ -529,7 +595,7 @@ class Firetruck:
             )
 
             for heading in headings:
-                poses.append(Pos(x, y, heading, location=(fine_row, fine_col)))
+                poses.append(Pos(x, y, heading, fine_location=(fine_row, fine_col)))
 
         return poses
 
@@ -545,7 +611,7 @@ class Firetruck:
             np.ceil(COVERAGE_RADIUS_METERS / field.world.cell_size)
         )
 
-        for poi_fine_loc in self.poi_locations:
+        for poi_fine_loc in self.poi_fine_locations:
             # Convert POI to coarse grid
             poi_coarse_row = poi_fine_loc[0] // cells_per_coarse
             poi_coarse_col = poi_fine_loc[1] // cells_per_coarse
@@ -596,12 +662,12 @@ class Firetruck:
         burning_set = set(map(tuple, burning_coarse))
 
         # Vectorized distances
-        poi_array = np.array(self.poi_locations)
+        poi_array = np.array(self.poi_fine_locations)
         distances = np.sqrt(np.sum((poi_array - truck_fine) ** 2, axis=1))
 
         # Count fires via fast-set intersection
         results = []
-        for i, poi_loc in enumerate(self.poi_locations):
+        for i, poi_loc in enumerate(self.poi_fine_locations):
             covered_cells = self.poi_coverage_map[poi_loc]
             fire_count = len(
                 covered_cells & burning_set
@@ -634,7 +700,7 @@ class Firetruck:
         # Create a hash from field configuration and relevant parameters
         hash_data = {
             "field_cells": self.world.field.cells.tobytes(),
-            "poi_locations": tuple(sorted(self.poi_locations)),
+            "poi_fine_locations": tuple(sorted(self.poi_fine_locations)),
             "min_turning_radius": self.min_turning_radius,
             "max_poi_distance": MAX_POI_DISTANCE,
             "num_headings": NUM_HEADINGS,
@@ -706,10 +772,11 @@ class Firetruck:
 
     def _build_roadmap(self) -> nx.DiGraph:
         """
-        Build a directed graph roadmap connecting POI poses with Reeds-Shepp arcs.
-        Returns a NetworkX DiGraph where:
-        - Nodes are Pos (x, y, heading)
-        - Edges contain path waypoints, segments, and cost
+        Build a strongly connected directed graph roadmap connecting POI poses with Reeds-Shepp arcs.
+        Ensures connectivity by:
+        1. Building bidirectional edges when possible
+        2. Removing isolated nodes
+        3. Keeping only the largest strongly connected component
         """
         start_time = time.time()
         logger.info(f"Building roadmap with {len(self.poi_poses)} poses")
@@ -730,6 +797,7 @@ class Firetruck:
         # Generate edges between nearby poses
         edge_count = 0
         collision_count = 0
+        bidirectional_count = 0
 
         for i, start_pose in enumerate(self.poi_poses):
             start_loc = self.world.world_to_grid(start_pose.x, start_pose.y)
@@ -746,50 +814,111 @@ class Firetruck:
 
                 # Try connecting to each heading at this location
                 for goal_pose in goal_poses:
-                    # Generate Reeds-Shepp path with collision checking during sampling
-                    result = self._compute_reeds_shepp_path(
+                    # Skip if we already have this edge (from reverse check)
+                    if G.has_edge(start_pose, goal_pose):
+                        continue
+
+                    # Generate forward path: start -> goal
+                    forward_result = self._compute_reeds_shepp_path(
                         start=start_pose,
                         goal=goal_pose,
                         turning_radius=self.min_turning_radius,
                         step_size=1.0,
                     )
 
-                    if not result:
+                    if not forward_result:
                         collision_count += 1
                         continue
 
-                    waypoints, segments = result
-
-                    # Compute path cost (total path length)
-                    path_length = sum(
-                        seg.start.distance_to(seg.end) for seg in segments
+                    forward_waypoints, forward_segments = forward_result
+                    forward_length = sum(
+                        seg.start.distance_to(seg.end) for seg in forward_segments
                     )
 
-                    # Add edge to graph
+                    # Try to compute a reverse path: goal -> start
+                    reverse_result = self._compute_reeds_shepp_path(
+                        start=goal_pose,
+                        goal=start_pose,
+                        turning_radius=self.min_turning_radius,
+                        step_size=1.0,
+                    )
+
+                    # Add forward edge
                     G.add_edge(
                         start_pose,
                         goal_pose,
-                        weight=path_length,
-                        waypoints=waypoints,
-                        segments=segments,
+                        weight=forward_length,
+                        waypoints=forward_waypoints,
+                        segments=forward_segments,
                     )
                     edge_count += 1
+
+                    # Add reverse edge if it exists
+                    if reverse_result:
+                        reverse_waypoints, reverse_segments = reverse_result
+                        reverse_length = sum(
+                            seg.start.distance_to(seg.end) for seg in reverse_segments
+                        )
+
+                        G.add_edge(
+                            goal_pose,
+                            start_pose,
+                            weight=reverse_length,
+                            waypoints=reverse_waypoints,
+                            segments=reverse_segments,
+                        )
+                        edge_count += 1
+                        bidirectional_count += 1
+                    else:
+                        collision_count += 1
 
             # Progress logging
             if (i + 1) % 100 == 0:
                 elapsed = time.time() - start_time
                 logger.info(
                     f"Processed {i + 1}/{len(self.poi_poses)} poses, "
-                    f"{edge_count} edges, {collision_count} collisions "
-                    f"(elapsed: {elapsed:.1f}s)"
+                    f"{edge_count} edges ({bidirectional_count} bidirectional pairs), "
+                    f"{collision_count} collisions (elapsed: {elapsed:.1f}s)"
                 )
 
         elapsed_time = time.time() - start_time
         logger.info(
-            f"Roadmap built in {elapsed_time:.1f}s: "
+            f"Initial roadmap built in {elapsed_time:.1f}s: "
             f"{G.number_of_nodes()} nodes, {G.number_of_edges()} edges, "
             f"{collision_count} paths rejected due to collision"
         )
+
+        # Remove isolated nodes (no edges at all)
+        isolated_nodes = list(nx.isolates(G))
+        if isolated_nodes:
+            logger.warning(f"Removing {len(isolated_nodes)} isolated nodes")
+            G.remove_nodes_from(isolated_nodes)
+
+        # Check if the graph is empty
+        if G.number_of_nodes() == 0:
+            logger.error("Roadmap is empty after removing isolated nodes!")
+            return G
+
+        # Keep only the largest strongly connected component
+        if not nx.is_strongly_connected(G):
+            strongly_connected = list(nx.strongly_connected_components(G))
+            largest_scc = max(strongly_connected, key=len)
+
+            removed_count = G.number_of_nodes() - len(largest_scc)
+            if removed_count > 0:
+                logger.warning(
+                    f"Roadmap not strongly connected. "
+                    f"Keeping largest SCC with {len(largest_scc)} nodes, "
+                    f"removing {removed_count} nodes"
+                )
+
+                # Create a new graph with only the largest SCC
+                G = G.subgraph(largest_scc).copy()
+
+        logger.info(
+            f"Final roadmap: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges"
+        )
+        logger.info(f"Strongly connected: {nx.is_strongly_connected(G)}")
 
         return G
 
@@ -797,7 +926,7 @@ class Firetruck:
         self, target_location: tuple[int, int]
     ) -> Optional[Tuple[int, int]]:
         """Find the nearest POI (fine-grid location) to the target coarse-grid location."""
-        if not self.poi_locations:
+        if not self.poi_fine_locations:
             return None
 
         field = self.world.field
@@ -811,7 +940,7 @@ class Firetruck:
         min_distance = float("inf")
         nearest_poi = None
 
-        for poi_loc in self.poi_locations:
+        for poi_loc in self.poi_fine_locations:
             poi_fine_row, poi_fine_col = poi_loc
 
             # Calculate Euclidean distance in fine grid space
@@ -851,7 +980,9 @@ class Firetruck:
             return False
 
         # Get all goal poses at the target POI location
-        goal_poses = [pose for pose in self.poi_poses if pose.location == target_poi]
+        goal_poses = [
+            pose for pose in self.poi_poses if pose.fine_location == target_poi
+        ]
 
         if not goal_poses:
             logger.warning(f"Target POI {target_poi} has no poses in the roadmap")
@@ -974,6 +1105,106 @@ class Firetruck:
         self.current_target_poi = None
         self.poi_arrival_time = None
         self.controller.stop()
+
+    def analyze_roadmap_connectivity(self):
+        """
+        Analyze the roadmap to check if every pose has a reciprocal way out.
+        """
+        roadmap = self.roadmap
+
+        logger.debug(f"Roadmap Statistics:")
+        logger.debug(f"  Nodes: {roadmap.number_of_nodes()}")
+        logger.debug(f"  Edges: {roadmap.number_of_edges()}")
+
+        # Check for isolated nodes (no outgoing or incoming edges)
+        isolated_nodes = list(nx.isolates(roadmap))
+        logger.debug(f"Isolated nodes (no edges at all): {len(isolated_nodes)}")
+
+        # Check for nodes with no outgoing edges (dead ends)
+        dead_end_nodes = [
+            node for node in roadmap.nodes() if roadmap.out_degree(node) == 0
+        ]
+        logger.debug(f"Dead-end nodes (no outgoing edges): {len(dead_end_nodes)}")
+
+        # Check for nodes with no incoming edges (unreachable)
+        unreachable_nodes = [
+            node for node in roadmap.nodes() if roadmap.in_degree(node) == 0
+        ]
+        logger.debug(f"Unreachable nodes (no incoming edges): {len(unreachable_nodes)}")
+
+        # Check strong connectivity (can reach any node from any other node)
+        is_strongly_connected = nx.is_strongly_connected(roadmap)
+        logger.debug(f"Strongly connected: {is_strongly_connected}")
+
+        if not is_strongly_connected:
+            # Find strongly connected components
+            strongly_connected = list(nx.strongly_connected_components(roadmap))
+            logger.debug(
+                f"Number of strongly connected components: {len(strongly_connected)}"
+            )
+            logger.debug(
+                f"Sizes of components: {sorted([len(scc) for scc in strongly_connected], reverse=True)}"
+            )
+
+            # Find the largest SCC
+            largest_scc = max(strongly_connected, key=len)
+            logger.debug(
+                f"Largest component contains {len(largest_scc)}/{roadmap.number_of_nodes()} nodes ({100*len(largest_scc)/roadmap.number_of_nodes():.1f}%)"
+            )
+
+        # Check weak connectivity (ignoring an edge direction)
+        is_weakly_connected = nx.is_weakly_connected(roadmap)
+        logger.debug(f"Weakly connected: {is_weakly_connected}")
+
+        if not is_weakly_connected:
+            weakly_connected = list(nx.weakly_connected_components(roadmap))
+            logger.debug(
+                f"Number of weakly connected components: {len(weakly_connected)}"
+            )
+            logger.debug(
+                f"Sizes of components: {sorted([len(wcc) for wcc in weakly_connected], reverse=True)}"
+            )
+
+        # Check reciprocal edges (bidirectional connections)
+        total_edges = roadmap.number_of_edges()
+        reciprocal_count = 0
+
+        for u, v in roadmap.edges():
+            if roadmap.has_edge(v, u):
+                reciprocal_count += 1
+
+        # Each reciprocal pair is counted twice
+        reciprocal_pairs = reciprocal_count // 2
+        logger.debug(f"Reciprocal edge pairs: {reciprocal_pairs}")
+        logger.debug(f"One-way edges: {total_edges - reciprocal_count}")
+        logger.debug(
+            f"Reciprocity ratio: {reciprocal_count/total_edges*100:.1f}% of edges have a reverse edge"
+        )
+
+        # Sample some dead-end nodes to show details
+        if dead_end_nodes:
+            logger.debug(f"\nSample dead-end nodes (first 5):")
+            for i, node in enumerate(dead_end_nodes[:5]):
+                in_deg = roadmap.in_degree(node)
+                logger.debug(f"  {i+1}. {node} - {in_deg} incoming edge(s), 0 outgoing")
+
+        if unreachable_nodes:
+            logger.debug(f"\nSample unreachable nodes (first 5):")
+            for i, node in enumerate(unreachable_nodes[:5]):
+                out_deg = roadmap.out_degree(node)
+                logger.debug(
+                    f"  {i+1}. {node} - 0 incoming, {out_deg} outgoing edge(s)"
+                )
+
+        return {
+            "is_strongly_connected": is_strongly_connected,
+            "is_weakly_connected": is_weakly_connected,
+            "dead_end_count": len(dead_end_nodes),
+            "unreachable_count": len(unreachable_nodes),
+            "isolated_count": len(isolated_nodes),
+            "reciprocal_pairs": reciprocal_pairs,
+            "one_way_edges": total_edges - reciprocal_count,
+        }
 
     # Rendering methods
     def render(self):
@@ -1222,9 +1453,9 @@ class Firetruck:
         truck_fine_location = [(truck_fine_row, truck_fine_col)]
         self._render_coverage_circles(truck_fine_location, draw_center_markers=False)
 
-    def render_poi_locations(self):
+    def render_poi_fine_locations(self):
         """Render POI location markers with 10 m coverage circles"""
-        self._render_coverage_circles(self.poi_locations, draw_center_markers=True)
+        self._render_coverage_circles(self.poi_fine_locations, draw_center_markers=True)
 
     def render_top_priority_pois(self):
         """
@@ -1355,20 +1586,7 @@ class VehicleController:
         path_segments: List[PathSegment],
         segment_index: int,
     ) -> Tuple[Pos, int, bool]:
-        """
-        Execute the pre-planned path by interpolating along segments.
-
-        Args:
-            dt: Time step
-            current_pose: Current vehicle pose (rear axle)
-            path_segments: List of path segments to follow
-            segment_index: Current segment index
-
-        Returns:
-            - new_pose: Updated vehicle pose
-            - new_segment_index: Updated segment index
-            - complete: True if a path following is complete
-        """
+        """Execute the pre-planned path by interpolating along segments."""
         if not path_segments:
             return current_pose, 0, True
 

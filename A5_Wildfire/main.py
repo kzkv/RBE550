@@ -21,22 +21,26 @@ import logging
 import numpy as np
 import pygame
 
-from field import Cell
 from firetruck import Firetruck
 from world import World
 from wumpus import Wumpus
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 DEBUG = False
+
+logger = logging.getLogger(__name__)
+(
+    logging.basicConfig(level=logging.DEBUG)
+    if DEBUG
+    else logging.basicConfig(level=logging.INFO)
+)
 
 rng = np.random.default_rng()
 
 pygame.init()
 pygame.display.set_caption("Wildfire")
 
-# SEED = 67
-SEED = 41
+SEED = 67
+# SEED = 41
 TIME_SPEED = 20.0  # Time speed coefficient
 PAR_TIME = 3600.0
 
@@ -55,6 +59,10 @@ world.firetruck = firetruck
 world.clock.tick()
 
 logger.info("Starting main loop")
+
+if DEBUG:
+    connectivity = firetruck.analyze_roadmap_connectivity()
+    logger.debug(connectivity)
 
 running = True
 while running:
@@ -98,7 +106,6 @@ while running:
     # Handle Firetruck
     if DEBUG:
         firetruck.render_roadmap()
-        firetruck.render_poi_locations()
     firetruck.render_top_priority_pois()
     firetruck.render_coverage_radius()
     firetruck.render_planned_path()

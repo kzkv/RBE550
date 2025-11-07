@@ -229,6 +229,9 @@ class Pos:
     y: float  # m
     heading: float  # rad, 0 is along the x-axis, CCW is positive
     location: Tuple[int, int] = None  # Optional (row, col) for roadmap poses
+    fine_location: Tuple[int, int] = (
+        None  # Optional fine grid location (row, col) for firetruck poses
+    )
 
     def distance_to(self, other: "Pos") -> float:
         """Euclidean distance to another position"""
