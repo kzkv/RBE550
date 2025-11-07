@@ -113,6 +113,11 @@ class World:
         if self.is_paused:
             self.dt_world = 0.0
         else:
+            # Cap dt to prevent huge jumps after resuming from pause
+            # This prevents accumulated real-time from causing simulation glitches
+            MAX_DT = 0.1  # Cap at 100ms of real time (6 FPS minimum)
+            dt_real = min(dt_real, MAX_DT)
+
             dt_world = dt_real * self.time_speed
             self.world_time += dt_world
             self.dt_world = dt_world  # Store for use by other components
@@ -124,6 +129,8 @@ class World:
     def resume_simulation(self):
         """Resume simulation time"""
         self.is_paused = False
+        # Consume any accumulated time to prevent large dt on next update
+        self.clock.tick()
 
     # Rendering
     def clear(self):
@@ -181,7 +188,7 @@ class World:
         pygame.draw.rect(self.display, HUD_BG_COLOR, hud_rect)
 
         # Format world time
-        time_str = f"{self.world_time:4.0f}s"
+        time_str = f"{self.world_time:4.1f}s"
 
         # Cell states tally
         tally_str = "  ".join(
@@ -191,11 +198,6 @@ class World:
 
         # Scores (color-coded)
         score_str = f"WU: {self.wumpus_score:<3d} FT: {self.firetruck_score:<3d}"
-
-        # Locations
-        wumpus_location = self.wumpus.get_location()
-        firetruck_location = self.firetruck.get_location()
-        locations_str = f"WU: {wumpus_location} FT: {firetruck_location}"
 
         # Pause indication
         pause_str = "PAUSED" if self.is_paused else ""
@@ -207,7 +209,6 @@ class World:
                     score_str,
                     time_str,
                     tally_str,
-                    locations_str,
                     pause_str,
                     message,
                 ]
