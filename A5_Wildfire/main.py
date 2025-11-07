@@ -32,7 +32,7 @@ pygame.display.set_caption("Wildfire")
 # SEED = 67
 SEED = 41
 
-TIME_SPEED = 50.0  # Time speed coefficient
+TIME_SPEED = 1000.0  # Time speed coefficient
 PAR_TIME = 3600.0
 
 WUMPUS_ROWS = (0, 10)

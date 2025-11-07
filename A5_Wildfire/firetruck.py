@@ -179,7 +179,7 @@ class Firetruck:
 
             if distance <= arrival_threshold:
                 self.poi_arrival_time = self.world.world_time
-                logger.info(
+                logger.debug(
                     f"Arrived at POI {self.current_target_poi} "
                     f"(distance: {distance:.2f}m)"
                 )
@@ -380,7 +380,7 @@ class Firetruck:
                 self._suppress_fires()
 
                 # Completed firefighting at this POI
-                logger.info(
+                logger.debug(
                     f"Completed firefighting at {self.current_target_poi} "
                     f"after {time_at_poi:.1f}s"
                 )
@@ -410,7 +410,7 @@ class Firetruck:
             self.path_complete = complete
 
             if complete:
-                logger.info("Path following complete")
+                logger.debug("Path following complete")
                 # Arrival will be detected in set_pose if we're near the POI
 
     def _update_goal(self):
@@ -443,7 +443,7 @@ class Firetruck:
             if path_result:
                 self.current_target_poi = poi_loc
                 self.poi_arrival_time = None  # Reset arrival time
-                logger.info(
+                logger.debug(
                     f"Navigating to POI {poi_loc} (priority: {fire_count} fires, "
                     f"distance: {distance * self.world.field.collision_discretization:.1f}m)"
                 )
@@ -1009,7 +1009,7 @@ class Firetruck:
             hasattr(start_pose, "fine_location")
             and start_pose.fine_location == target_poi
         ):
-            logger.info(f"Already at target POI {target_poi}, no path needed")
+            logger.debug(f"Already at target POI {target_poi}, no path needed")
             self.clear_planned_path()
             # Mark as arrived so we can suppress fires
             if self.poi_arrival_time is None:
@@ -1087,7 +1087,7 @@ class Firetruck:
         forward_count = sum(1 for seg in self.planned_path_segments if seg.is_forward)
         reverse_count = len(self.planned_path_segments) - forward_count
 
-        logger.info(
+        logger.debug(
             f"Planned path to POI {target_poi}: "
             f"{len(self.planned_path_segments)} segments "
             f"({forward_count} forward, {reverse_count} reverse), "

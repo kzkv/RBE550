@@ -121,7 +121,7 @@ class Wumpus:
 
         # Allow Wumpus to move through its escape zone, but never through the truck's actual cell
         truck_actual_cell = field.create_location_mask(truck_row, truck_col, radius=0)
-        truck_avoidance = truck_avoidance & ~wumpus_escape | truck_actual_cell
+        truck_avoidance = (truck_avoidance & ~wumpus_escape) | truck_actual_cell
 
         # Combine all cells to avoid
         avoid = impassable | truck_avoidance
@@ -282,10 +282,9 @@ class Wumpus:
             return
 
         if self.world.field.get_cell(row, col) == Cell.EMPTY:
-            self.location = (row, col)
-
-            # Reset ignition flag when location is set (even if it's the same location)
-            self.has_ignited_at_location = False  # Make sure we shouldn't check if the location hasn't changed instead
+            if self.location != (row, col):
+                self.location = (row, col)
+                self.has_ignited_at_location = False
 
         # Reset motion execution state
         self._movement_timer = 0.0
@@ -343,7 +342,7 @@ class Wumpus:
             ignited = self.world.field.ignite_random_neighbor(self.location)
             if ignited:
                 self.has_ignited_at_location = True
-                logger.info(f"Wumpus ignited a cell")
+                logger.debug(f"Wumpus ignited a cell")
 
     def render(self):
         """Render the wumpus at its current location"""

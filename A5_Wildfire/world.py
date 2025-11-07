@@ -115,7 +115,7 @@ class World:
         else:
             # Cap dt to prevent huge jumps after resuming from pause
             # This prevents accumulated real-time from causing simulation glitches
-            MAX_DT = 0.1  # Cap at 100ms of real time (6 FPS minimum)
+            MAX_DT = 0.1  # Cap at 100 ms of real time (6 FPS minimum)
             dt_real = min(dt_real, MAX_DT)
 
             dt_world = dt_real * self.time_speed
@@ -129,7 +129,7 @@ class World:
     def resume_simulation(self):
         """Resume simulation time"""
         self.is_paused = False
-        # Consume any accumulated time to prevent large dt on next update
+        # Consume any accumulated time to prevent large dt on the next update
         self.clock.tick()
 
     # Rendering
