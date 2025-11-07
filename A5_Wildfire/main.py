@@ -2,19 +2,9 @@
 # RBE 550, Assignment 5, Wildfire
 # See Gen AI usage approach write-up in the report
 
-# Motion-plan for firetruck
-# TODO: tune the simulation
-
 # Performance profiling
 # TODO: run cpython profiling
 # TODO: see if in-run profiling is necessary
-
-# If I had more time
-# TODO: consider singularity points (an obstacle trap present in SEED = 41)
-# TODO: roadmap failsafe -> drive to the nearest POI if lost
-
-# Report:
-# Pos vs location (discrete vs continuous)
 
 import logging
 
@@ -39,15 +29,16 @@ rng = np.random.default_rng()
 pygame.init()
 pygame.display.set_caption("Wildfire")
 
-SEED = 67
-# SEED = 41
+# SEED = 67
+SEED = 41
+
 TIME_SPEED = 50.0  # Time speed coefficient
 PAR_TIME = 3600.0
 
 WUMPUS_ROWS = (0, 10)
 WUMPUS_COLS = (0, 10)
-FIRETRUCK_ROWS = (40, 49)
-FIRETRUCK_COLS = (40, 49)
+FIRETRUCK_ROWS = (35, 49)
+FIRETRUCK_COLS = (35, 49)
 
 world = World(SEED, time_speed=TIME_SPEED)
 wumpus = Wumpus(world, WUMPUS_ROWS, WUMPUS_COLS)
@@ -75,10 +66,7 @@ while running:
             x, y = world.pixel_to_world(mx, my)
             row, col = world.world_to_grid(x, y)
 
-    if world.world_time >= PAR_TIME:
-        # TODO: consider what parts of the rendering should be done here
-        world.render_hud(message="Time's up!")
-        continue
+    under_par_time = world.world_time < PAR_TIME
 
     # Compute changes, set goals, update actors
     world.pause_simulation()
@@ -88,27 +76,30 @@ while running:
     world.resume_simulation()
 
     # Handle world state changes and rendering
-    world.update()
-    world.field.update_burning_cells()
     world.clear()
+    if under_par_time:
+        world.update()
+        world.field.update_burning_cells()
+        world.render_spread()
     world.render_field()
     if DEBUG:
         world.field.render_collision_overlay()
-    world.render_spread()
-    world.render_hud()
+    world.render_hud() if under_par_time else world.render_hud(message="Time's up!")
 
     # Handle Wumpus
-    wumpus.render_priority_heatmap()
-    wumpus.move()
-    wumpus.render_path()
+    if under_par_time:
+        wumpus.render_priority_heatmap()
+        wumpus.move()
+        wumpus.render_path()
     wumpus.render()
 
     # Handle Firetruck
     if DEBUG:
         firetruck.render_roadmap()
-    firetruck.render_top_priority_pois()
-    firetruck.render_coverage_radius()
-    firetruck.render_planned_path()
+    if under_par_time:
+        firetruck.render_top_priority_pois()
+        firetruck.render_coverage_radius()
+        firetruck.render_planned_path()
     firetruck.render()
 
     pygame.display.flip()
