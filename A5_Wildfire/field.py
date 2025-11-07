@@ -226,7 +226,7 @@ class Field:
         inflated = binary_dilation(self.fine_obstacles, structure=kernel)
         return inflated
 
-    def _world_to_fine_grid(self, x: float, y: float) -> tuple[int, int]:
+    def world_to_fine_grid(self, x: float, y: float) -> tuple[int, int]:
         """Convert world coordinates (x, y) to (row, col) indices in the fine grid."""
         # Convert from Cartesian (y up) to grid coordinates (y down)
         # Match the coordinate system used in world_to_grid
@@ -245,7 +245,7 @@ class Field:
         Returns True if a collision is detected, False if clear.
         Uses pre-computed fine-grid overlay for O(1) lookup.
         """
-        row, col = self._world_to_fine_grid(pos.x, pos.y)
+        row, col = self.world_to_fine_grid(pos.x, pos.y)
 
         # Out of bounds check
         in_bounds = 0 <= row < self.fine_grid_size and 0 <= col < self.fine_grid_size

@@ -157,23 +157,32 @@ class Firetruck:
         """Set the firetruck pose"""
         self.pos = pos
 
-        # Check if we arrived at the target POI
+        # Check if we arrived at the target POI (use world-space distance check)
         if self.current_target_poi is not None and self.poi_arrival_time is None:
-            # Convert the current position to coarse grid to check arrival
-            current_coarse = self.world.world_to_grid(pos.x, pos.y)
+            field = self.world.field
 
-            # Convert target POI (fine grid) to coarse grid
-            cells_per_coarse = int(
-                self.world.field.world.cell_size
-                / self.world.field.collision_discretization
+            # Convert target POI (fine grid) to world coordinates
+            target_fine_row, target_fine_col = self.current_target_poi
+            target_x = (target_fine_col + 0.5) * field.collision_discretization
+            target_y = (
+                field.grid_dimensions * field.world.cell_size
+                - (target_fine_row + 0.5) * field.collision_discretization
             )
-            poi_coarse_row = self.current_target_poi[0] // cells_per_coarse
-            poi_coarse_col = self.current_target_poi[1] // cells_per_coarse
 
-            # If we're at the POI's coarse grid location, mark arrival
-            if current_coarse == (poi_coarse_row, poi_coarse_col):
+            # Calculate world-space distance
+            dx = pos.x - target_x
+            dy = pos.y - target_y
+            distance = math.sqrt(dx * dx + dy * dy)
+
+            # Arrival threshold: close enough to the POI
+            arrival_threshold = 2.0  # meters - arrived when within 2 m of a POI center
+
+            if distance <= arrival_threshold:
                 self.poi_arrival_time = self.world.world_time
-                logger.info(f"Arrived at POI {self.current_target_poi}")
+                logger.info(
+                    f"Arrived at POI {self.current_target_poi} "
+                    f"(distance: {distance:.2f}m)"
+                )
 
     def _compute_reeds_shepp_path(
         self,
@@ -360,19 +369,34 @@ class Firetruck:
         """Update the firetruck state"""
         dt = self.world.dt_world
 
+        # Check if we should stay at current POI for minimum duration
+        if self.poi_arrival_time is not None:
+            time_at_poi = self.world.world_time - self.poi_arrival_time
+            if time_at_poi < FIREFIGHTING_DURATION:
+                # Stay put - don't move, don't suppress yet
+                return
+            else:
+                # Suppress fires now that we've waited long enough
+                self._suppress_fires()
+
+                # Completed firefighting at this POI
+                logger.info(
+                    f"Completed firefighting at {self.current_target_poi} "
+                    f"after {time_at_poi:.1f}s"
+                )
+                # Mark path as complete and clear state to trigger new goal selection
+                self.path_complete = True
+                self.planned_path_segments = []
+                self.current_target_poi = None
+                self.poi_arrival_time = None
+                # Fall through to select a new goal
+
         # Check if we need to select a new goal
         if self.path_complete or not self.planned_path_segments:
             self._update_goal()
 
+        # Move along a path if we have one
         if self.planned_path_segments and not self.path_complete:
-            # Check if we should stay at current POI for minimum duration
-            if self.poi_arrival_time is not None:
-                time_at_poi = self.world.world_time - self.poi_arrival_time
-                if time_at_poi < FIREFIGHTING_DURATION:
-                    # Stay put and suppress fires
-                    self._suppress_fires()
-                    return
-
             # Everything operates in the rear-axle frame now
             new_pose, new_index, complete = self.controller.update(
                 dt=dt,
@@ -387,11 +411,7 @@ class Firetruck:
 
             if complete:
                 logger.info("Path following complete")
-                # Mark that we've arrived at the POI
-                if self.poi_arrival_time is None:
-                    self.poi_arrival_time = self.world.world_time
-
-        self._suppress_fires()
+                # Arrival will be detected in set_pose if we're near the POI
 
     def _update_goal(self):
         """Automatically select and navigate to the highest priority accessible POI"""
@@ -402,23 +422,25 @@ class Firetruck:
             # No fires to fight
             return
 
+        # Check if we should stay at the current target POI area
+        if self.current_target_poi is not None and self.poi_arrival_time is not None:
+            time_at_poi = self.world.world_time - self.poi_arrival_time
+            if time_at_poi < FIREFIGHTING_DURATION:
+                # Still need to stay in this area
+                return
+
         # Try to plan a path to POIs in priority order
         for poi_loc, distance, fire_count in ranked_pois:
-            # Skip if this is our current target and we haven't stayed long enough
+            # Skip the current target if we just finished there
             if self.current_target_poi == poi_loc:
-                if self.poi_arrival_time is not None:
-                    time_at_poi = self.world.world_time - self.poi_arrival_time
-                    if time_at_poi < FIREFIGHTING_DURATION:
-                        # Still need to stay here
-                        logger.debug(
-                            f"Staying at current POI {poi_loc} "
-                            f"({time_at_poi:.1f}s / {FIREFIGHTING_DURATION}s)"
-                        )
-                        return
+                logger.debug(
+                    f"Completed firefighting at {poi_loc}, looking for new target"
+                )
+                continue
 
             # Try to plan a path to this POI
-            if self.plan_path_to_poi(poi_loc):
-                # Successfully planned path
+            path_result = self.plan_path_to_poi(poi_loc)
+            if path_result:
                 self.current_target_poi = poi_loc
                 self.poi_arrival_time = None  # Reset arrival time
                 logger.info(
@@ -426,8 +448,6 @@ class Firetruck:
                     f"distance: {distance * self.world.field.collision_discretization:.1f}m)"
                 )
                 return
-            else:
-                logger.debug(f"Could not find path to POI {poi_loc}, trying next...")
 
         # No accessible POIs found
         logger.warning("No accessible POIs found in priority list")
@@ -482,14 +502,8 @@ class Firetruck:
         # Suppress all fires in range (they've been exposed to firefighting long enough)
         suppressed_count = 0
         for pos in burning_in_range:
-            # Check when this specific fire ignited
-            ignition_time = field.ignition_times.get(pos, current_time)
-
-            # Fire must have been burning since we arrived (or before)
-            # and we've been here for FIREFIGHTING_DURATION
-            if ignition_time <= self.poi_arrival_time + FIREFIGHTING_DURATION:
-                if field.suppress(pos[0], pos[1]):
-                    suppressed_count += 1
+            if field.suppress(pos[0], pos[1]):
+                suppressed_count += 1
 
         if suppressed_count > 0:
             logger.debug(
@@ -988,6 +1002,19 @@ class Firetruck:
             logger.warning(f"Target POI {target_poi} has no poses in the roadmap")
             self.clear_planned_path()
             return False
+
+        # Check if we're already at the target location (all goal poses are at the same location)
+        # Use fine_location comparison since start_pose should also have this attribute
+        if (
+            hasattr(start_pose, "fine_location")
+            and start_pose.fine_location == target_poi
+        ):
+            logger.info(f"Already at target POI {target_poi}, no path needed")
+            self.clear_planned_path()
+            # Mark as arrived so we can suppress fires
+            if self.poi_arrival_time is None:
+                self.poi_arrival_time = self.world.world_time
+            return True  # Consider this a success - we're already there
 
         # Heuristic for A*: Euclidean distance between poses
         def length_heuristic(node_a, node_b):
@@ -1671,13 +1698,7 @@ class VehicleController:
 
         new_pose = Pos(new_pose.x, new_pose.y, final_heading)
 
-        # Check if a path is complete
+        # Check if a path is complete - only when we've consumed all segments
         complete = new_segment_index >= len(path_segments)
-
-        if not complete:
-            # Also check if we're very close to the final goal and moving slowly
-            final_distance = new_pose.distance_to(path_segments[-1].end)
-            if final_distance < 0.1 and abs(self.current_velocity) < 0.5:
-                complete = True
 
         return new_pose, new_segment_index, complete
