@@ -20,6 +20,40 @@ CELL_SIZE = 5.0  # 5 meters per cell
 PIXELS_PER_METER = 5
 OBSTACLE_DENSITY = 0.1
 
+"""
+World controller and simulation orchestrator.
+
+The World class manages global simulation state, coordinates both agents (Wumpus and Firetruck),
+and maintains a consistent notion of world time independent from real time.
+
+Core responsibilities:
+    1. Maintain the global clock and pause/resume logic.
+    2. Step the physics of fire spread, burnout, and suppression.
+    3. Update Wumpus and Firetruck agents sequentially each frame.
+    4. Aggregate scores and expose summary statistics.
+    5. Render the composite scene: field layers, agent overlays, HUD.
+
+Simulation sequencing:
+    1. Pause world time before any compute-heavy planning phase (A* for Wumpus and Firetruck).
+    2. Allow agents to replan paths or select new goals.
+    3. Resume world time and advance the simulation tick.
+    4. Update fire states and apply scoring changes.
+    5. Render the current frame to screen.
+
+Scoring:
+    +1 point for each ignition caused by the Wumpus.
+    +1 point for each burned out cell awarder to the Wumpus.
+    +2 points for each burning cell suppressed by the Firetruck.
+    Burnout and suppression transitions are handled directly by the Field class.
+
+HUD and telemetry:
+    - Displays world time, agent scores, and active simulation state.
+
+Design notes:
+    - Deterministic simulation: world time pauses predictable renders (no "teleports") and clean time.
+    - Clean separation between compute (planners) and render (pygame loop).
+"""
+
 
 class World:
     """World state and rendering"""

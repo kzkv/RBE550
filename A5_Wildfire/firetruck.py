@@ -41,8 +41,41 @@ TWO_PI = 6.283185307179586  # 2 * math.pi
 PI = 3.141592653589793  # math.pi
 
 """
-Reeds-Shepp path segments are generated from cell center to cell center. This introduces a discrepancy, 
-as an Ackermann steering pivots the car about the rear axle. The discrepancy will be corrected by a path follower.
+Firetruck agent implementation.
+
+Implements a kinematically-valid motion-planning and firefighting system for the Wildfire simulation.
+The Firetruck is modeled as a rear-axle–referenced Ackermann vehicle with finite turning radius.
+Its planning pipeline combines a sampling-based roadmap (PRM) with Reeds–Shepp local planning.
+
+Roadmap generation:
+    1. Sample Points of Interest (POIs) derived from heatmap intensity of potentially burning cells.
+    2. Expand each POI into multiple headings to cover reachable poses.
+    3. Connect samples using Reeds–Shepp path segments (forward and reverse arcs).
+    4. Collision-check each edge against the fine-grid overlay (against the "worst-case" doagonal).
+    5. Retain only the largest strongly connected subgraph for motion planning.
+    6. Cache the roadmap for reuse between runs.
+
+Path planning and execution:
+    1. Select the best reachable POI based on priority:
+        + Burning density within coverage radius (more fires -> higher priority)
+        - Distance from the current truck pose (shorter path -> better)
+    2. Query the PRM to find the shortest collision-free path to that POI.
+    3. Follow the path.
+    4. On arrival, dwell for specified time and suppress all fires within coverage radius.
+
+Collision checking:
+    1. Based on a fine-grid boolean overlay (inflated obstacles).
+    2. Inflation radius computed as hypot(length/2 + wheelbase/2, width/2),
+      consistent with the rear-axle reference frame.
+    3. Each Reeds–Shepp segment is discretized; collisions are checked at every sample point.
+
+Scoring and behavior:
+    +2 points per successfully suppressed burning cell.
+    The truck alternates between travel and dwell states until simulation end.
+
+Performance considerations:
+    - Roadmap build dominates CPU time; caching amortizes cost.
+    - Online pathfinding and control execute in real time.
 """
 
 

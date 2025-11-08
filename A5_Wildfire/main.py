@@ -2,10 +2,6 @@
 # RBE 550, Assignment 5, Wildfire
 # See Gen AI usage approach write-up in the report
 
-# Performance profiling
-# TODO: run cpython profiling
-# TODO: see if in-run profiling is necessary
-
 import logging
 
 import numpy as np
@@ -30,7 +26,8 @@ pygame.init()
 pygame.display.set_caption("Wildfire")
 
 # SEED = 67
-SEED = 41
+# SEED = 41
+SEED = 3
 
 TIME_SPEED = 1000.0  # Time speed coefficient
 PAR_TIME = 3600.0

@@ -22,16 +22,36 @@ SPREAD_RADIUS = 30.0  # m
 BURNOUT_DURATION = (
     720.0  # s, time to burn out after ignition; give Firetruck a chance to score points
 )
-FIRETRUCK_COVERAGE_RADIUS = 10.0  # m
 
 """
-Fire propagation logic:
-- Fires ignite on OBSTACLE cells, transitioning them to BURNING state
-- Each burning cell spreads fire once after SPREAD_DURATION seconds 
-  to all OBSTACLE cells within SPREAD_RADIUS meters
-- Fires burn out after BURNOUT_DURATION seconds, transitioning to BURNED state
-- The 'has_spread' set tracks which fires have already propagated 
-  to prevent repeated spreading
+Field generation and environment model.
+
+The Field class represents the static world layout (obstacles) and the dynamic fire states.
+It operates in both coarse and fine resolutions to support different planning modules.
+
+Responsibilities:
+    - Generate randomized obstacle distributions using seeded tetromino shapes.
+    - Initialize and manage the fine-grid mask for collision checking.
+    - Track cell states: EMPTY, OBSTACLE, BURNING, BURNED.
+    - Provide fire spread, burnout, and suppression mechanics.
+
+Fire dynamics:
+    1. Burning cells spread fire to nearby obstacles within SPREAD_RADIUS_METERS.
+    2. Spread occurs once per cell, tracked via has_spread mask.
+    3. Cells transition from BURNING → BURNED after BURN_DURATION.
+    4. Suppression immediately sets a cell to OBSTACLE.
+
+Collision overlays:
+    - Obstacles are inflated by a circular structuring element to approximate
+      the Minkowski sum of the vehicle footprint and safety margin.
+    - The inflation radius is computed from vehicle dimensions and stored as a constant.
+    - Boolean overlays enable O(1) collision checks in planners.
+
+Rendering:
+    - The fine-grid overlay is pre-rendered as a pygame Surface for efficient drawing.
+
+Field methods expose fast world-to-grid and grid-to-world conversions
+for consistent handling across Wumpus, Firetruck, and World modules.
 """
 
 
