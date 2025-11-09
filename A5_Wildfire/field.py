@@ -36,9 +36,9 @@ Responsibilities:
     - Provide fire spread, burnout, and suppression mechanics.
 
 Fire dynamics:
-    1. Burning cells spread fire to nearby obstacles within SPREAD_RADIUS_METERS.
+    1. Burning cells spread fire to nearby obstacles within SPREAD_RADIUS.
     2. Spread occurs once per cell, tracked via has_spread mask.
-    3. Cells transition from BURNING → BURNED after BURN_DURATION.
+    3. Cells transition from BURNING → BURNED after BURNOUT_DURATION.
     4. Suppression immediately sets a cell to OBSTACLE.
 
 Collision overlays:
