@@ -51,7 +51,7 @@ Roadmap generation:
     1. Sample Points of Interest (POIs) derived from heatmap intensity of potentially burning cells.
     2. Expand each POI into multiple headings to cover reachable poses.
     3. Connect samples using Reeds–Shepp path segments (forward and reverse arcs).
-    4. Collision-check each edge against the fine-grid overlay (against the "worst-case" doagonal).
+    4. Collision-check each edge against the fine-grid overlay (against the "worst-case" diagonal).
     5. Retain only the largest strongly connected subgraph for motion planning.
     6. Cache the roadmap for reuse between runs.
 

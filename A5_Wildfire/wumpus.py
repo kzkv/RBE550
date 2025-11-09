@@ -301,9 +301,7 @@ class Wumpus:
 
         # Reset ignition flag when a new goal is set, but only if the goal is new
         if self.goal != (row, col):
-            self.has_ignited_at_location = (
-                False  # TODO: make sure goal setting should reset the flag
-            )
+            self.has_ignited_at_location = False
 
         self.goal = (row, col)
         self.path = self.plan_path_to(self.goal)

@@ -12,6 +12,7 @@ from world import World
 from wumpus import Wumpus
 
 DEBUG = False
+EXIT_ON_PAR = True
 
 logger = logging.getLogger(__name__)
 (
@@ -25,9 +26,11 @@ rng = np.random.default_rng()
 pygame.init()
 pygame.display.set_caption("Wildfire")
 
-# SEED = 67
+# SEED = 3
+SEED = 67
 # SEED = 41
-SEED = 3
+# SEED = 550
+# SEED = 5
 
 TIME_SPEED = 1000.0  # Time speed coefficient
 PAR_TIME = 3600.0
@@ -58,12 +61,18 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            # TODO: remove the manual controls when no longer needed
             mx, my = pygame.mouse.get_pos()
             x, y = world.pixel_to_world(mx, my)
             row, col = world.world_to_grid(x, y)
 
     under_par_time = world.world_time < PAR_TIME
+
+    if not under_par_time and EXIT_ON_PAR:
+        logger.info("Time's up!")
+        logger.info(f"Time speed: {int(TIME_SPEED)}x")
+        logger.info(f"Wumpus score: {world.wumpus_score}")
+        logger.info(f"Firetruck score: {world.firetruck_score}")
+        running = False
 
     # Compute changes, set goals, update actors
     world.pause_simulation()
