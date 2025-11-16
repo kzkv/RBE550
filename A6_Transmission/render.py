@@ -35,7 +35,14 @@ class Renderer:
 
         # Plot body
         ax.plot_surface(
-            X, Y, Z, color=color, alpha=alpha, linewidth=0, antialiased=True, shade=True
+            X,
+            Y,
+            Z,
+            color=color,
+            alpha=alpha,
+            linewidth=0,
+            antialiased=True,
+            shade=False,
         )
 
         # Left cap
@@ -129,7 +136,7 @@ class Renderer:
                     cyl["radius"],
                     cyl["length"],
                     color="gray",
-                    alpha=0.6,
+                    alpha=1.0,
                 )
 
         # Plot mainshaft (orange, movable)
@@ -144,7 +151,7 @@ class Renderer:
                     cyl["radius"],
                     cyl["length"],
                     color="orange",
-                    alpha=0.8,
+                    alpha=1.0,
                 )
 
         # Set labels
@@ -153,14 +160,14 @@ class Renderer:
         ax.set_zlabel("Z (mm)", fontsize=10)
 
         # Set limits
-        ax.set_xlim([-50, 330])
-        ax.set_ylim([-150, 150])
+        ax.set_xlim([-50, 350])
+        ax.set_ylim([-200, 200])
         ax.set_zlim([-200, 200])
 
         # Fixed aspect ratio to avoid ellipsoid renderings
         ax.set_box_aspect([1, 1, 1])
 
-    def show(self, mainshaft_pos=None, title=None, view_angle=(20, 45)):
+    def show(self, mainshaft_pos=None, title=None, view_angle=(0, -90)):
         """Show interactive plot"""
         matplotlib.use("macosx")
 

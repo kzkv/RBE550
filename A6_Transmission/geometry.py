@@ -57,47 +57,54 @@ class Transmission:
     def __init__(self):
         """Initialize transmission with mainshaft, countershaft, and case"""
 
-        # TODO: adjust the dimensions
         self.mainshaft = Shaft(
-            [
-                (72, 40),  # Front bearing journal and first gear
-                (80, 140),  # Second gear cluster
-                (60, 180),  # Third gear cluster
-                (52, 212),  # Fourth gear
-                (40, 40),  # Rear output section
+            [  # diameter, width
+                (36, 20),  # Front bearing journal
+                (90, 8),  # Gear
+                (120, 30),  # Clutch
+                (90, 33),  # Two gears
+                (106, 25),  # Gear
+                (96, 8),  # Gear
+                (120, 25),  # Gear
+                (120, 30),  # Clutch
+                (96, 8),  # Gear
+                (130, 25),  # Gear
+                (36, 118),  # Rear bearing journal
             ],
             name="mainshaft",
         )
 
         self.countershaft = Shaft(
-            [
-                (72, 76),  # Input gear (large)
-                (56, 76),  # Second gear
-                (80, 160),  # Third gear (large)
-                (50, 76),  # Fourth gear
-                (72, 76),  # Fifth gear
+            [  # diameter, width
+                (36, 30),  # Front journal
+                (140, 25),  # Gear
+                (36, 91),  # Shaft segment  FIX lengh
+                (140, 25),  # Gear
+                (125, 25),  # Gear
+                (36, 8),  # Shaft segment
+                (80, 25),  # Gear
+                (46, 38),  # Shaft segment
+                (100, 25),  # Gear
+                (36, 38),  # Rear journal
             ],
             name="countershaft",
         )
 
         # Countershaft vertical offset (below mainshaft)
-        self.countershaft_offset = np.array([0, 0, -90])
+        self.countershaft_offset = np.array([-25, 0, -50])
 
-        self.case_dims = {
+        self.case_inner_dims = {
             "length": 280,  # x
-            "width": 210,  # y
+            "width": 160,  # y
             "height": 300,  # z
         }
 
-        # Initial mainshaft position (centered in case)  TODO: position properly
-        self.mainshaft_initial_pos = np.array([140, 0, 0])
+        # Initial mainshaft position
+        self.mainshaft_initial_pos = np.array([55, 0, 65])
 
     def get_mainshaft_at(self, position: np.ndarray) -> List[dict]:
         """Get mainshaft cylinders at a specified position"""
-
-        # Offset from the initial position
-        offset = position - self.mainshaft_initial_pos
-        return self.mainshaft.get_cylinders(offset)
+        return self.mainshaft.get_cylinders(position)
 
     def get_countershaft(self) -> List[dict]:
         """Get countershaft cylinders (stationary)"""
@@ -107,13 +114,13 @@ class Transmission:
         """Get a case as two corner points"""
 
         min_corner = np.array(
-            [0, -self.case_dims["width"] / 2, -self.case_dims["height"] / 2]
+            [0, -self.case_inner_dims["width"] / 2, -self.case_inner_dims["height"] / 2]
         )
         max_corner = np.array(
             [
-                self.case_dims["length"],
-                self.case_dims["width"] / 2,
-                self.case_dims["height"] / 2,
+                self.case_inner_dims["length"],
+                self.case_inner_dims["width"] / 2,
+                self.case_inner_dims["height"] / 2,
             ]
         )
         return min_corner, max_corner
