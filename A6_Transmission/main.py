@@ -2,16 +2,16 @@
 # RBE 550, Assignment 6, Transmission
 # See Gen AI usage approach write-up in the report
 
-import matplotlib
+import trimesh
+import numpy as np
 
-matplotlib.use("macosx")
-
-from geometry import Transmission
-from render import Renderer
+from transmission import Transmission
 
 if __name__ == "__main__":
     transmission = Transmission()
-    renderer = Renderer(transmission)
 
-    view_angle = (90, 0)
-    renderer.show(title="SM-465 Transmission", view_angle=view_angle)
+    top_view = {"angles": [0, 0, 0], "distance": 600}
+    side_view = {"angles": [0, np.radians(90), 0], "distance": 600}
+    front_view = {"angles": [np.radians(90), 0, 0], "distance": 600}
+
+    transmission.show(camera_angle=front_view)
