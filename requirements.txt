@@ -1,9 +1,0 @@
-# A0, A2
-networkx~=3.5
-matplotlib~=3.10.6
-numpy~=2.3.2
-blessed~=1.21.0
-scipy~=1.16.2
-
-# A5 Valet
-pygame~=2.6.1
