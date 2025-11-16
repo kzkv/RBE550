@@ -111,6 +111,63 @@ class Renderer:
             points = vertices[edge]
             ax.plot3D(*points.T, color=color, linewidth=linewidth)
 
+    def _plot_bearing_bores(self, ax, color="blue", linewidth=1.5):
+        """Plot bearing bore circles on front and back walls"""
+        theta = np.linspace(0, 2 * np.pi, 40)
+        radius = self.transmission.bearing_bore_diameter / 2
+        z_center = self.transmission.bearing_bore_center_height
+
+        # Front bearing bore (x=0)
+        y_front = radius * np.cos(theta)
+        z_front = z_center + radius * np.sin(theta)
+        x_front = np.zeros_like(y_front)
+        ax.plot3D(x_front, y_front, z_front, color=color, linewidth=linewidth)
+
+        # Rear bearing bore (x=280)
+        y_rear = radius * np.cos(theta)
+        z_rear = z_center + radius * np.sin(theta)
+        x_rear = np.ones_like(y_rear) * self.transmission.case_outer_dims["length"]
+        ax.plot3D(x_rear, y_rear, z_rear, color=color, linewidth=linewidth)
+
+    def _plot_pto_windows(self, ax, color="blue", linewidth=1.5):
+        """Plot PTO window rectangles on side walls"""
+        window_w = self.transmission.pto_window_dims["width"]
+        window_h = self.transmission.pto_window_dims["height"]
+        center_x = self.transmission.pto_window_center_x
+        center_z = self.transmission.pto_window_center_z
+
+        # Calculate window corners
+        x_min = center_x - window_w / 2
+        x_max = center_x + window_w / 2
+        z_min = center_z - window_h / 2
+        z_max = center_z + window_h / 2
+
+        # Left wall window (y = -width/2)
+        y_left = -self.transmission.case_outer_dims["width"] / 2
+        window_left = np.array(
+            [
+                [x_min, y_left, z_min],
+                [x_max, y_left, z_min],
+                [x_max, y_left, z_max],
+                [x_min, y_left, z_max],
+                [x_min, y_left, z_min],  # Close the rectangle
+            ]
+        )
+        ax.plot3D(*window_left.T, color=color, linewidth=linewidth)
+
+        # Right wall window (y = +width/2)
+        y_right = self.transmission.case_outer_dims["width"] / 2
+        window_right = np.array(
+            [
+                [x_min, y_right, z_min],
+                [x_max, y_right, z_min],
+                [x_max, y_right, z_max],
+                [x_min, y_right, z_max],
+                [x_min, y_right, z_min],  # Close the rectangle
+            ]
+        )
+        ax.plot3D(*window_right.T, color=color, linewidth=linewidth)
+
     def plot(
         self,
         ax,
@@ -118,14 +175,29 @@ class Renderer:
         show_mainshaft=True,
         show_countershaft=True,
         show_case=True,
+        show_inner_case=True,
     ):
         """Plot the transmission"""
         # Plot case
         if show_case:
-            min_corner, max_corner = self.transmission.get_case_bounds()
+            # Outer case
+            min_corner, max_corner = self.transmission.get_case_outer_bounds()
             self._plot_box_wireframe(
                 ax, min_corner, max_corner, color="blue", linewidth=2
             )
+
+            # Inner case bounds
+            if show_inner_case:
+                min_inner, max_inner = self.transmission.get_case_inner_bounds()
+                self._plot_box_wireframe(
+                    ax, min_inner, max_inner, color="blue", linewidth=1
+                )
+
+            # Bearing bores
+            self._plot_bearing_bores(ax, color="darkblue", linewidth=1.5)
+
+            # PTO windows
+            self._plot_pto_windows(ax, color="darkblue", linewidth=1.5)
 
         # Plot countershaft (gray, stationary)
         if show_countershaft:
@@ -167,7 +239,7 @@ class Renderer:
         # Fixed aspect ratio to avoid ellipsoid renderings
         ax.set_box_aspect([1, 1, 1])
 
-    def show(self, mainshaft_pos=None, title=None, view_angle=(0, -90)):
+    def show(self, mainshaft_pos=None, title=None, view_angle=(15, -115)):
         """Show interactive plot"""
         matplotlib.use("macosx")
 

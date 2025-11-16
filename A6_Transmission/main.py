@@ -13,4 +13,5 @@ if __name__ == "__main__":
     transmission = Transmission()
     renderer = Renderer(transmission)
 
-    renderer.show(title="SM-465 Transmission")
+    view_angle = (90, 0)
+    renderer.show(title="SM-465 Transmission", view_angle=view_angle)
