@@ -56,6 +56,20 @@ class Transmission:
         primary_copy.apply_transform(transform)
         return primary_copy
 
+    def check_collision(self, position, rotation=None):
+        """Check if a primary shaft at given pose collides with case- or counter-shaft."""
+        # Get a primary shaft at the test pose
+        primary_test = self.set_primary_pose(position, rotation)
+
+        # Create a collision manager and add all objects
+        manager = trimesh.collision.CollisionManager()
+        manager.add_object("case", self.case)
+        manager.add_object("counter", self.counter)
+        manager.add_object("primary", primary_test)
+
+        # Check for collision
+        return manager.in_collision_internal()
+
     def _create_scene(self):
         """Create a scene with named geometries."""
         scene = trimesh.Scene()
@@ -91,7 +105,7 @@ class Transmission:
             print("Warning: Empty path provided")
             return
 
-        # Convert path to numpy array and ensure 6-DOF format
+        # Convert a path to a numpy array and ensure 6-DOF format
         waypoints = []
         for pose in path:
             pose = np.asarray(pose, dtype=float)
@@ -99,7 +113,7 @@ class Transmission:
                 # [x, y, z] -> [x, y, z, 0, 0, 0]
                 pose = np.concatenate([pose, [0.0, 0.0, 0.0]])
             elif len(pose) == 6:
-                pass  # Already in correct format
+                pass  # Already in the correct format
             else:
                 raise ValueError(
                     f"Pose must be [x,y,z] or [x,y,z,roll,pitch,yaw], got {pose}"
@@ -111,7 +125,7 @@ class Transmission:
 
         print(f"Animating path with {num_waypoints} waypoints...")
 
-        # Create scene
+        # Create a scene
         scene = self._create_scene()
         scene.set_camera(
             angles=camera_angle.get("angles"),
@@ -127,8 +141,8 @@ class Transmission:
             "interpolate": interpolate,
         }
 
-        def animation_callback(viewer):
-            """Update primary shaft position along the path."""
+        def animation_callback(_):
+            """Update the primary shaft position along the path."""
             state["t"] += 0.01 * state["speed"]
 
             if state["interpolate"]:
