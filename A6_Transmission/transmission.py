@@ -75,35 +75,90 @@ class Transmission:
 
         scene.show()
 
-    def animate_primary(self, camera_angle):
-        """Animate the primary shaft (simple proof of concept)."""
-        scene = self._create_scene()
+    def animate_path(self, path, camera_angle, speed=1.0, interpolate=True):
+        """
+        Animate the primary shaft following a path.
 
-        # Set initial camera
+        Args:
+            path: List of poses, where each pose is [x, y, z] or [x, y, z, roll, pitch, yaw]
+            camera_angle: Camera settings dict with 'angles' and 'distance'
+            speed: Animation speed multiplier (1.0 = normal, 2.0 = 2x faster)
+            interpolate: If True, smoothly interpolate between waypoints
+
+        The path will be the primary output of RRT planning.
+        """
+        if len(path) == 0:
+            print("Warning: Empty path provided")
+            return
+
+        # Convert path to numpy array and ensure 6-DOF format
+        waypoints = []
+        for pose in path:
+            pose = np.asarray(pose, dtype=float)
+            if len(pose) == 3:
+                # [x, y, z] -> [x, y, z, 0, 0, 0]
+                pose = np.concatenate([pose, [0.0, 0.0, 0.0]])
+            elif len(pose) == 6:
+                pass  # Already in correct format
+            else:
+                raise ValueError(
+                    f"Pose must be [x,y,z] or [x,y,z,roll,pitch,yaw], got {pose}"
+                )
+            waypoints.append(pose)
+
+        waypoints = np.array(waypoints)
+        num_waypoints = len(waypoints)
+
+        print(f"Animating path with {num_waypoints} waypoints...")
+
+        # Create scene
+        scene = self._create_scene()
         scene.set_camera(
             angles=camera_angle.get("angles"),
             distance=camera_angle.get("distance"),
         )
 
-        # Animation parameter (mutable so inner function can update it)
-        t = {"value": 0.0}
+        # Animation state
+        state = {
+            "t": 0.0,  # Current time parameter
+            "speed": speed,
+            "waypoints": waypoints,
+            "num_waypoints": num_waypoints,
+            "interpolate": interpolate,
+        }
 
         def animation_callback(viewer):
-            """
-            Called every frame by SceneViewer.
-            Updates the transform of the 'primary' node to animate it.
-            """
-            t["value"] += 0.01
+            """Update primary shaft position along the path."""
+            state["t"] += 0.01 * state["speed"]
 
-            angle = t["value"] * 2.0
-            x_offset = 100.0 * np.sin(t["value"])
+            if state["interpolate"]:
+                # Smooth interpolation between waypoints
+                # Map t to waypoint index
+                total_progress = state["t"] % 1.0  # Loop animation
+                waypoint_progress = total_progress * (state["num_waypoints"] - 1)
 
-            position = [x_offset, 0.0, 0.0]
-            rotation = [0.0, angle, 0.0]
+                idx = int(waypoint_progress)
+                local_t = waypoint_progress - idx
 
+                if idx >= state["num_waypoints"] - 1:
+                    # At the end
+                    current_pose = state["waypoints"][-1]
+                else:
+                    # Interpolate between waypoints
+                    pose_start = state["waypoints"][idx]
+                    pose_end = state["waypoints"][idx + 1]
+                    current_pose = (1 - local_t) * pose_start + local_t * pose_end
+            else:
+                # Step through waypoints (no interpolation)
+                idx = int(state["t"] * state["num_waypoints"]) % state["num_waypoints"]
+                current_pose = state["waypoints"][idx]
+
+            # Extract position and rotation
+            position = current_pose[:3]
+            rotation = current_pose[3:6]
+
+            # Update transform
             transform = self._primary_transform(position, rotation)
-
-            # Update the node transform in the scene graph
             scene.graph.update(frame_to="primary", matrix=transform)
 
         SceneViewer(

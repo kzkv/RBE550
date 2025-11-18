@@ -15,5 +15,4 @@ if __name__ == "__main__":
     side_view = {"angles": [0, np.radians(90), 0], "distance": 600}
     front_view = {"angles": [np.radians(90), 0, 0], "distance": 600}
 
-    # Run animated primary shaft (ignoring collisions)
-    transmission.animate_primary(camera_angle=front_view)
+    transmission.show(top_view)
