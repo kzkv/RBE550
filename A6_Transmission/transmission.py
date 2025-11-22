@@ -2,14 +2,22 @@ import trimesh
 import numpy as np
 from trimesh.viewer import SceneViewer
 
+# Reduce mesh size for faster computation by this much
+SHAFT_MESH_SIMPLIFICATION_PERCENT = 0.75
+CASE_MESH_SIMPLIFICATION_PERCENT = 0.5
+
 
 class Transmission:
     """Transmission assembly with positioned meshes and collision detection."""
 
     def __init__(self):
-        self.case = trimesh.load_mesh("mesh/case.stl")
-        self.primary = trimesh.load_mesh("mesh/primary_shaft.stl")
-        self.counter = trimesh.load_mesh("mesh/counter_shaft.stl")
+        self.case = simplify_mesh("mesh/case.stl", CASE_MESH_SIMPLIFICATION_PERCENT)
+        self.primary = simplify_mesh(
+            "mesh/primary_shaft.stl", SHAFT_MESH_SIMPLIFICATION_PERCENT
+        )
+        self.counter = simplify_mesh(
+            "mesh/counter_shaft.stl", SHAFT_MESH_SIMPLIFICATION_PERCENT
+        )
 
         self.case.visual.face_colors = [100, 100, 200, 150]
         self.primary.visual.face_colors = [255, 165, 0, 255]
@@ -127,3 +135,21 @@ class Transmission:
             scene.graph.update(frame_to="primary", matrix=transform)
 
         SceneViewer(scene, start_loop=True, callback=animation_callback)
+
+
+def simplify_mesh(input_path, target_percent=0.5):
+    """
+    Simplify a mesh to reduce triangle count.
+    target_percent: Target percentage of original triangles (0.5 = 50%)
+    """
+    print(f"Loading {input_path}...")
+    mesh = trimesh.load_mesh(input_path)
+    original_faces = len(mesh.faces)
+
+    print(f"  Original: {original_faces} faces")
+
+    # Simplify using quadric edge collapse
+    # target_faces = int(original_faces * target_percent)
+    simplified = mesh.simplify_quadric_decimation(target_percent)
+
+    return simplified
