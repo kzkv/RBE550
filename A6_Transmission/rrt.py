@@ -28,6 +28,7 @@ class RRT:
         step_size=10.0,
         rotation_step_size=np.radians(5.0),
         max_iter=5000,
+        seed=None,
     ):
         self.transmission = transmission
         self.start = Node(start_config)
@@ -37,13 +38,17 @@ class RRT:
         self.max_iter = max_iter
         self.tree = [self.start]
 
+        # Set random seed for reproducibility
+        if seed is not None:
+            np.random.seed(seed)
+
         self.pos_bounds = np.array([[-100, 400], [-100, 300], [-100, 400]])
         self.rot_bounds = np.array(
             [[-np.pi, np.pi], [-np.pi / 2, np.pi / 2], [-np.pi, np.pi]]
         )
 
     def sample_random(self):
-        """Sample random configuration with optional goal biasing."""
+        """Sample random configuration uniformly."""
         pos = np.array(
             [
                 np.random.uniform(self.pos_bounds[i][0], self.pos_bounds[i][1])
@@ -137,9 +142,9 @@ class RRT:
             else:
                 collision_count += 1
 
-            if (i + 1) % 500 == 0:
+            if (i + 1) % 100 == 0:
                 print(
-                    f"[{i+1}/{self.max_iter}] tree={len(self.tree)} coll={collision_count}"
+                    f"[{i+1}/{self.max_iter}] nodes: {len(self.tree)} collisions: {collision_count}"
                 )
 
         print(f"Max iterations reached: tree={len(self.tree)} coll={collision_count}")

@@ -9,13 +9,15 @@ from rrt import RRT
 # CONFIGURATION
 MODE = "plan_poc"  # Plan short escape path
 # MODE = "plan_extract"  # Plan full extraction: lift and twist
+RECALCULATE_PATH = False
 SHOW_PATH = True  # View saved path
 
 # RRT PARAMETERS
 STEP_SIZE = 5.0  # Step size in mm
-ROTATION_STEP_SIZE = np.radians(5.0)  # Step size in radians
+ROTATION_STEP_SIZE = np.radians(6.0)  # Step size in radians
 MAX_ITER = 10000  # Max iterations
 OUTPUT_FILE = "path.npy"  # Path output file
+SEED = 67
 
 # VISUALIZATION PARAMETERS
 PATH_FILE = "path.npy"  # Path file to visualize
@@ -24,13 +26,13 @@ CAMERA = {"angles": [np.radians(30), np.radians(45), 0], "distance": 500}
 if __name__ == "__main__":
 
     # MODE: POC escape path (small lift)
-    if MODE == "plan_poc":
+    if MODE == "plan_poc" and RECALCULATE_PATH:
         transmission = Transmission()
         default_pos = transmission._primary_centroid.copy()
 
         start_config = np.concatenate([default_pos, [0.0, 0.0, 0.0]])
         goal_pos = default_pos.copy()
-        goal_pos[2] += 25  # Lift X mm
+        goal_pos[2] += 35  # Lift, mm
         goal_config = np.concatenate([goal_pos, [0.0, 0.0, 0.0]])
 
         start_coll = transmission.check_collision(
@@ -51,6 +53,7 @@ if __name__ == "__main__":
             STEP_SIZE,
             ROTATION_STEP_SIZE,
             MAX_ITER,
+            SEED,
         )
         path = rrt.plan()
 
@@ -73,7 +76,7 @@ if __name__ == "__main__":
             print("\nFAILED: No path found")
 
     # MODE: Plan full extraction (350mm lift)
-    elif MODE == "plan_extract":
+    elif MODE == "plan_extract" and RECALCULATE_PATH:
         transmission = Transmission()
         default_pos = transmission._primary_centroid.copy()
 
@@ -93,10 +96,16 @@ if __name__ == "__main__":
 
         print(f"Start: {start_config[:3]} {'[COLL]' if start_coll else '[FREE]'}")
         print(f"Goal:  {goal_config[:3]} {'[COLL]' if goal_coll else '[FREE]'}")
-        print(f"Planning: step={STEP_SIZE}mm, iter={MAX_ITER}, bias={GOAL_BIAS}\n")
+        print(f"Planning: step={STEP_SIZE}mm, iter={MAX_ITER}")
 
         rrt = RRT(
-            transmission, start_config, goal_config, STEP_SIZE, MAX_ITER, GOAL_BIAS
+            transmission,
+            start_config,
+            goal_config,
+            STEP_SIZE,
+            ROTATION_STEP_SIZE,
+            MAX_ITER,
+            SEED,
         )
         path = rrt.plan()
 
