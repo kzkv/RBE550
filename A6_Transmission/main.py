@@ -9,13 +9,14 @@ from rrt import RRT
 # CONFIGURATION
 MODE = "plan_poc"  # Plan short escape path
 # MODE = "plan_extract"  # Plan full extraction: lift and twist
-RECALCULATE_PATH = False
+RECALCULATE_PATH = True
 SHOW_PATH = True  # View saved path
 
 # RRT PARAMETERS
 STEP_SIZE = 5.0  # Step size in mm
-ROTATION_STEP_SIZE = np.radians(6.0)  # Step size in radians
+ROTATION_STEP_SIZE = np.radians(1.0)  # Step size in radians
 MAX_ITER = 10000  # Max iterations
+GOAL_THRESHOLD = 10.0
 OUTPUT_FILE = "path.npy"  # Path output file
 SEED = 67
 
@@ -24,6 +25,7 @@ PATH_FILE = "path.npy"  # Path file to visualize
 CAMERA = {"angles": [np.radians(30), np.radians(45), 0], "distance": 500}
 
 if __name__ == "__main__":
+    path_found = False
 
     # MODE: POC escape path (small lift)
     if MODE == "plan_poc" and RECALCULATE_PATH:
@@ -32,6 +34,7 @@ if __name__ == "__main__":
 
         start_config = np.concatenate([default_pos, [0.0, 0.0, 0.0]])
         goal_pos = default_pos.copy()
+        goal_pos[0] += 20  # Pull into the case
         goal_pos[2] += 35  # Lift, mm
         goal_config = np.concatenate([goal_pos, [0.0, 0.0, 0.0]])
 
@@ -50,10 +53,11 @@ if __name__ == "__main__":
             transmission,
             start_config,
             goal_config,
-            STEP_SIZE,
-            ROTATION_STEP_SIZE,
-            MAX_ITER,
-            SEED,
+            step_size=STEP_SIZE,
+            rotation_step_size=ROTATION_STEP_SIZE,
+            max_iter=MAX_ITER,
+            goal_threshold=GOAL_THRESHOLD,
+            seed=SEED,
         )
         path = rrt.plan()
 
@@ -71,6 +75,7 @@ if __name__ == "__main__":
             print(f"Distance: {dist:.1f}mm, Rotation: {np.degrees(rot):.1f}°")
 
             np.save(OUTPUT_FILE, np.array(path))
+            path_found = True
             print(f"Saved: {OUTPUT_FILE}")
         else:
             print("\nFAILED: No path found")
@@ -102,10 +107,11 @@ if __name__ == "__main__":
             transmission,
             start_config,
             goal_config,
-            STEP_SIZE,
-            ROTATION_STEP_SIZE,
-            MAX_ITER,
-            SEED,
+            step_size=STEP_SIZE,
+            rotation_step_size=ROTATION_STEP_SIZE,
+            max_iter=MAX_ITER,
+            goal_threshold=GOAL_THRESHOLD,
+            seed=SEED,
         )
         path = rrt.plan()
 
@@ -123,12 +129,13 @@ if __name__ == "__main__":
             print(f"Distance: {dist:.1f}mm, Rotation: {np.degrees(rot):.1f}°")
 
             np.save(OUTPUT_FILE, np.array(path))
+            path_found = True
             print(f"Saved: {OUTPUT_FILE}")
         else:
             print("\nFAILED: No path found")
 
     # MODE: Visualize saved path
-    if SHOW_PATH:
+    if SHOW_PATH and path_found:
         import trimesh
 
         transmission = Transmission()

@@ -25,9 +25,10 @@ class RRT:
         transmission,
         start_config,
         goal_config,
-        step_size=10.0,
-        rotation_step_size=np.radians(5.0),
-        max_iter=5000,
+        step_size,
+        rotation_step_size,
+        max_iter,
+        goal_threshold,
         seed=None,
     ):
         self.transmission = transmission
@@ -37,15 +38,14 @@ class RRT:
         self.rotation_step_size = rotation_step_size
         self.max_iter = max_iter
         self.tree = [self.start]
+        self.goal_threshold = goal_threshold
 
         # Set random seed for reproducibility
         if seed is not None:
             np.random.seed(seed)
 
         self.pos_bounds = np.array([[-100, 400], [-100, 300], [-100, 400]])
-        self.rot_bounds = np.array(
-            [[-np.pi, np.pi], [-np.pi / 2, np.pi / 2], [-np.pi, np.pi]]
-        )
+        self.rot_bounds = np.array([[-np.radians(5), np.radians(5)] for _ in range(3)])
 
     def sample_random(self):
         """Sample random configuration uniformly."""
@@ -113,9 +113,9 @@ class RRT:
             print(f"Collision check error: {e}")
             return False
 
-    def is_goal_reached(self, node, threshold=20.0):
+    def is_goal_reached(self, node):
         """Check if node is within threshold of goal."""
-        return self.distance(node.config, self.goal.config) < threshold
+        return self.distance(node.config, self.goal.config) < self.goal_threshold
 
     def plan(self):
         """Execute RRT planning algorithm."""
