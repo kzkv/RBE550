@@ -3,9 +3,14 @@
 # See Gen AI usage approach write-up in the report
 
 import numpy as np
-from transmission import Transmission
+from transmission import (
+    Transmission,
+    COLOR_START,
+    COLOR_GOAL,
+    COLOR_END,
+    COLOR_INTERMEDIATE,
+)
 from rrt import RRT
-import trimesh
 
 # Configuration
 RECALCULATE_PATH = False
@@ -77,27 +82,14 @@ if __name__ == "__main__":
 
     # DRY setup for SHOW_GOAL and SHOW_PATH
     if SHOW_GOAL or SHOW_PATH:
-        scene = trimesh.Scene()
-        scene.add_geometry(transmission.case, node_name="case")
-        scene.add_geometry(transmission.counter, node_name="counter")
-
-        # Start (red)
-        primary_start = transmission.set_primary_pose(
-            start_config[:3], start_config[3:6]
-        )
-        primary_start.visual.face_colors = [255, 0, 0, 100]
-        scene.add_geometry(primary_start, node_name="start")
-
+        scene = transmission.create_base_scene()
+        transmission.add_primary_to_scene(scene, start_config, COLOR_START, "start")
     else:
         scene = None
 
     # Visualize goal pose
     if SHOW_GOAL:
-        # Goal (green)
-        primary_goal = transmission.set_primary_pose(goal_config[:3], goal_config[3:6])
-        primary_goal.visual.face_colors = [0, 255, 0, 150]
-        scene.add_geometry(primary_goal, node_name="goal")
-
+        transmission.add_primary_to_scene(scene, goal_config, COLOR_GOAL, "goal")
         scene.set_camera(**CAMERA)
         scene.show()
 
@@ -106,24 +98,21 @@ if __name__ == "__main__":
         path = np.load(PATH_FILE)
         print(f"Loaded path: {len(path)} waypoints")
 
-        # End (green)
-        primary_end = transmission.set_primary_pose(path[-1][:3], path[-1][3:6])
-        primary_end.visual.face_colors = [0, 255, 0, 200]
-        scene.add_geometry(primary_end, node_name="end")
+        # End pose
+        transmission.add_primary_to_scene(scene, path[-1], COLOR_END, "end")
 
-        # Intermediate (blue)
+        # Intermediate poses (every 10th waypoint)
         for i in range(1, len(path) - 1):
             if i % 10 == 0:
-                primary_mid = transmission.set_primary_pose(path[i][:3], path[i][3:6])
-                primary_mid.visual.face_colors = [0, 100, 255, 100]
-                scene.add_geometry(primary_mid, node_name=f"mid_{i}")
+                transmission.add_primary_to_scene(
+                    scene, path[i], COLOR_INTERMEDIATE, f"mid_{i}"
+                )
 
         # Waypoint markers
         for i, config in enumerate(path):
-            sphere = trimesh.creation.icosphere(radius=3.0)
-            sphere.apply_translation(config[:3])
-            sphere.visual.face_colors = [255, 0, 0, 255]
-            scene.add_geometry(sphere, node_name=f"waypoint_{i}")
+            transmission.add_waypoint_sphere(
+                scene, config[:3], node_name=f"waypoint_{i}"
+            )
 
         scene.set_camera(**CAMERA)
         scene.show()

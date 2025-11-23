@@ -6,6 +6,16 @@ from trimesh.viewer import SceneViewer
 SHAFT_MESH_SIMPLIFICATION_PERCENT = 0.5
 CASE_MESH_SIMPLIFICATION_PERCENT = 0.25
 
+# Visualization colors [R, G, B, Alpha]
+COLOR_CASE = [100, 100, 200, 100]
+COLOR_COUNTER = [128, 128, 128, 255]
+COLOR_PRIMARY = [255, 165, 0, 255]
+COLOR_START = [255, 0, 0, 255]
+COLOR_GOAL = [0, 255, 0, 255]
+COLOR_END = [0, 255, 0, 255]
+COLOR_INTERMEDIATE = [0, 100, 255, 100]
+COLOR_WAYPOINT = [255, 0, 0, 255]
+
 
 class Transmission:
     """Transmission assembly with positioned meshes and collision detection."""
@@ -19,9 +29,9 @@ class Transmission:
             "mesh/counter_shaft.stl", SHAFT_MESH_SIMPLIFICATION_PERCENT
         )
 
-        self.case.visual.face_colors = [100, 100, 200, 100]
-        self.primary.visual.face_colors = [255, 165, 0, 255]
-        self.counter.visual.face_colors = [128, 128, 128, 255]
+        self.case.visual.face_colors = COLOR_CASE
+        self.primary.visual.face_colors = COLOR_PRIMARY
+        self.counter.visual.face_colors = COLOR_COUNTER
 
         self.primary_centroid = self.primary.centroid
 
@@ -62,6 +72,30 @@ class Transmission:
         """Check if a primary shaft collides with case or counter-shaft."""
         primary_test = self.set_primary_pose(position, rotation)
         return self._collision_manager.in_collision_single(primary_test)
+
+    def create_base_scene(self):
+        """Create a scene with case and counter-shaft only (no primary)."""
+        scene = trimesh.Scene()
+        scene.add_geometry(self.case, node_name="case")
+        scene.add_geometry(self.counter, node_name="counter")
+        return scene
+
+    def add_primary_to_scene(self, scene, config, color, node_name="primary"):
+        """Add a primary shaft to scene at given config with specified color."""
+        primary_copy = self.set_primary_pose(config[:3], config[3:6])
+        primary_copy.visual.face_colors = color
+        scene.add_geometry(primary_copy, node_name=node_name)
+
+    def add_waypoint_sphere(
+        self, scene, position, radius=3.0, color=None, node_name=None
+    ):
+        """Add a waypoint sphere marker to scene."""
+        if color is None:
+            color = COLOR_WAYPOINT
+        sphere = trimesh.creation.icosphere(radius=radius)
+        sphere.apply_translation(position)
+        sphere.visual.face_colors = color
+        scene.add_geometry(sphere, node_name=node_name)
 
     def _create_scene(self):
         """Create a scene with current geometry."""
