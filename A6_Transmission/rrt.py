@@ -68,6 +68,10 @@ class RRT:
             ]
         )
 
+        print(
+            f"Planning: step={self.step_size}mm, iter={self.max_iter}, goal_sample={self.goal_sample_rate}"
+        )
+
         # Dynamic rotation bounds based on start and goal
         # This allows RRT to explore from start orientation to goal orientation
         start_rot = self.start.rotation

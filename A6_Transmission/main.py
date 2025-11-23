@@ -5,60 +5,55 @@
 import numpy as np
 from transmission import Transmission
 from rrt import RRT
+import trimesh
 
-# CONFIGURATION
-MODE = "plan_poc"  # Plan short escape path
-# MODE = "plan_extract"  # Plan full extraction: lift and twist
-RECALCULATE_PATH = True
+# Configuration
+RECALCULATE_PATH = False
+SHOW_GOAL = False  # Show goal pose
 SHOW_PATH = True  # View saved path
-SHOW_GOAL = False
+ANIMATE_PATH = False  # Animate path
 
-# RRT PARAMETERS
+# RRT parameters
 STEP_SIZE = 5.0  # Step size in mm
 ROTATION_STEP_SIZE = np.radians(3.0)  # Step size in radians
 MAX_ITER = 20000  # Max iterations
-GOAL_THRESHOLD = 20.0
+GOAL_THRESHOLD = 5.0
 GOAL_SAMPLE_RATE = 0.1  # Sample goal some portion of the time
 OUTPUT_FILE = "path.npy"  # Path output file
 SEED = 67
 
-# VISUALIZATION PARAMETERS
+# Visualization parameters
 PATH_FILE = "path.npy"  # Path file to visualize
-CAMERA = {"angles": [np.radians(75), np.radians(0), np.radians(0)], "distance": 600}
+CAMERA = {"angles": [np.radians(75), np.radians(0), np.radians(0)], "distance": 800}
+ANIMATION_SPEED = 1.0  # Speed multiplier
 
 if __name__ == "__main__":
     path_found = False
 
     transmission = Transmission()
-    default_pos = transmission._primary_centroid.copy()
-
-    # TODO: switch from the trivial movement to full extraction
-    # start_config = np.concatenate([default_pos, [0.0, 0.0, 0.0]])
-    # goal_pos = default_pos.copy()
-    # # goal_pos[0] += 20  # Pull into the case
-    # goal_pos[2] += 50  # Lift, mm
-    # goal_config = np.concatenate([goal_pos, [0.0, 0.0, 0.0]])
+    default_pos = transmission.primary_centroid.copy()
 
     start_config = np.concatenate([default_pos, [0.0, 0.0, 0.0]])
 
-    goal_pos = default_pos.copy()
-    goal_pos[0] -= 200
-    goal_pos[2] += 300  # Lift 350mm
-    goal_config = np.concatenate(
-        [goal_pos, [0.0, np.radians(90), np.radians(0)]]
-    )  # TODO: add twist to place the shaft over the case
+    X_OFFSET = -200  # mm, pull toward the case body
+    Y_OFFSET = 0  # mm, lateral movement
+    Z_OFFSET = 300  # mm, lift
+    ROLL = 0.0  # degrees, shaft rotation
+    PITCH = 90.0  # degrees, tilt vertical
+    YAW = 0.0  # degrees, yaw rotation
 
-    start_coll = transmission.check_collision(
-        start_config[:3].tolist(), start_config[3:6].tolist()
+    goal_config = np.array(
+        [
+            default_pos[0] + X_OFFSET,
+            default_pos[1] + Y_OFFSET,
+            default_pos[2] + Z_OFFSET,
+            np.radians(ROLL),
+            np.radians(PITCH),
+            np.radians(YAW),
+        ]
     )
-    goal_coll = transmission.check_collision(
-        goal_config[:3].tolist(), goal_config[3:6].tolist()
-    )
 
-    print(f"Start: {start_config[:3]} {'[COLL]' if start_coll else '[FREE]'}")
-    print(f"Goal:  {goal_config[:3]} {'[COLL]' if goal_coll else '[FREE]'}")
-    print(f"Planning: step={STEP_SIZE}mm, iter={MAX_ITER}")
-
+    # Calculate a path
     if RECALCULATE_PATH:
         rrt = RRT(
             transmission,
@@ -74,86 +69,42 @@ if __name__ == "__main__":
         path = rrt.plan()
 
         if path:
-            dist = sum(
-                np.linalg.norm(np.array(path[i + 1][:3]) - np.array(path[i][:3]))
-                for i in range(len(path) - 1)
-            )
-            rot = sum(
-                np.linalg.norm(np.array(path[i + 1][3:6]) - np.array(path[i][3:6]))
-                for i in range(len(path) - 1)
-            )
-
             print(f"\nSUCCESS: {len(path)} waypoints, {len(rrt.tree)} nodes")
-            print(f"Distance: {dist:.1f}mm, Rotation: {np.degrees(rot):.1f}°")
-
             np.save(OUTPUT_FILE, np.array(path))
             path_found = True
-            print(f"Saved: {OUTPUT_FILE}")
         else:
             print("\nFAILED: No path found")
 
-    # MODE: Visualize goal pose
-    if SHOW_GOAL:
-        import trimesh
-
-        print("Visualizing goal pose...")
-        print("  Red = Start position")
-        print("  Green = Goal position (check if it makes sense!)")
-        print()
-
+    # DRY setup for SHOW_GOAL and SHOW_PATH
+    if SHOW_GOAL or SHOW_PATH:
         scene = trimesh.Scene()
         scene.add_geometry(transmission.case, node_name="case")
         scene.add_geometry(transmission.counter, node_name="counter")
 
-        # Start (red, semi-transparent)
+        # Start (red)
         primary_start = transmission.set_primary_pose(
             start_config[:3], start_config[3:6]
         )
         primary_start.visual.face_colors = [255, 0, 0, 100]
         scene.add_geometry(primary_start, node_name="start")
 
-        # Goal (green, semi-transparent)
+    else:
+        scene = None
+
+    # Visualize goal pose
+    if SHOW_GOAL:
+        # Goal (green)
         primary_goal = transmission.set_primary_pose(goal_config[:3], goal_config[3:6])
         primary_goal.visual.face_colors = [0, 255, 0, 150]
         scene.add_geometry(primary_goal, node_name="goal")
 
-        # Add coordinate axes at goal to show orientation
-        axis_length = 30
-        # X-axis (red line)
-        x_axis = trimesh.creation.cylinder(radius=1, height=axis_length)
-        x_axis.visual.face_colors = [255, 0, 0, 255]
-        # Y-axis (green line)
-        y_axis = trimesh.creation.cylinder(radius=1, height=axis_length)
-        y_axis.visual.face_colors = [0, 255, 0, 255]
-        # Z-axis (blue line)
-        z_axis = trimesh.creation.cylinder(radius=1, height=axis_length)
-        z_axis.visual.face_colors = [0, 0, 255, 255]
-
-        # Apply goal rotation and position to axes
-        goal_transform = transmission._primary_transform(
-            goal_config[:3], goal_config[3:6]
-        )
-
         scene.set_camera(**CAMERA)
         scene.show()
 
-    # MODE: Visualize saved path
-    if SHOW_PATH and path_found:
-        import trimesh
-
-        transmission = Transmission()
+    # Visualize the saved path
+    if SHOW_PATH and (not RECALCULATE_PATH or path_found):
         path = np.load(PATH_FILE)
-
         print(f"Loaded path: {len(path)} waypoints")
-
-        scene = trimesh.Scene()
-        scene.add_geometry(transmission.case, node_name="case")
-        scene.add_geometry(transmission.counter, node_name="counter")
-
-        # Start (red)
-        primary_start = transmission.set_primary_pose(path[0][:3], path[0][3:6])
-        primary_start.visual.face_colors = [255, 0, 0, 150]
-        scene.add_geometry(primary_start, node_name="start")
 
         # End (green)
         primary_end = transmission.set_primary_pose(path[-1][:3], path[-1][3:6])
@@ -171,13 +122,16 @@ if __name__ == "__main__":
         for i, config in enumerate(path):
             sphere = trimesh.creation.icosphere(radius=3.0)
             sphere.apply_translation(config[:3])
-            if i == 0:
-                sphere.visual.face_colors = [255, 0, 0, 255]
-            elif i == len(path) - 1:
-                sphere.visual.face_colors = [0, 255, 0, 255]
-            else:
-                sphere.visual.face_colors = [255, 255, 0, 255]
+            sphere.visual.face_colors = [255, 0, 0, 255]
             scene.add_geometry(sphere, node_name=f"waypoint_{i}")
 
         scene.set_camera(**CAMERA)
         scene.show()
+
+    # Animate the saved path
+    if ANIMATE_PATH and (not RECALCULATE_PATH or path_found):
+        transmission = Transmission()
+        path = np.load(PATH_FILE)
+        transmission.animate_path(
+            path=path, camera_angle=CAMERA, speed=ANIMATION_SPEED, interpolate=True
+        )

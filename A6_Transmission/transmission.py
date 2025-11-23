@@ -19,13 +19,13 @@ class Transmission:
             "mesh/counter_shaft.stl", SHAFT_MESH_SIMPLIFICATION_PERCENT
         )
 
-        self.case.visual.face_colors = [100, 100, 200, 150]
+        self.case.visual.face_colors = [100, 100, 200, 100]
         self.primary.visual.face_colors = [255, 165, 0, 255]
         self.counter.visual.face_colors = [128, 128, 128, 255]
 
-        self._primary_centroid = self.primary.centroid
+        self.primary_centroid = self.primary.centroid
 
-        # Pre-build collision manager for static objects (major speedup)
+        # Pre-build collision manager for static objects
         self._collision_manager = trimesh.collision.CollisionManager()
         self._collision_manager.add_object("case", self.case)
         self._collision_manager.add_object("counter", self.counter)
@@ -36,13 +36,13 @@ class Transmission:
 
         if rotation is None:
             transform = np.eye(4)
-            transform[:3, 3] = position - self._primary_centroid
+            transform[:3, 3] = position - self.primary_centroid
             return transform
 
         rotation = np.asarray(rotation, dtype=float)
 
         T_to_origin = np.eye(4)
-        T_to_origin[:3, 3] = -self._primary_centroid
+        T_to_origin[:3, 3] = -self.primary_centroid
 
         R = trimesh.transformations.euler_matrix(rotation[0], rotation[1], rotation[2])
 
@@ -52,19 +52,19 @@ class Transmission:
         return T_pos @ R @ T_to_origin
 
     def set_primary_pose(self, position, rotation=None):
-        """Return copy of primary shaft at specified pose."""
+        """Return copy of a primary shaft at specified pose."""
         primary_copy = self.primary.copy()
         transform = self._primary_transform(position, rotation)
         primary_copy.apply_transform(transform)
         return primary_copy
 
     def check_collision(self, position, rotation=None):
-        """Check if primary shaft collides with case or counter-shaft."""
+        """Check if a primary shaft collides with case or counter-shaft."""
         primary_test = self.set_primary_pose(position, rotation)
         return self._collision_manager.in_collision_single(primary_test)
 
     def _create_scene(self):
-        """Create scene with current geometry."""
+        """Create a scene with current geometry."""
         scene = trimesh.Scene()
         scene.add_geometry(self.case, node_name="case")
         scene.add_geometry(self.counter, node_name="counter")
@@ -138,18 +138,5 @@ class Transmission:
 
 
 def simplify_mesh(input_path, target_percent=0.5):
-    """
-    Simplify a mesh to reduce triangle count.
-    target_percent: Target percentage of original triangles (0.5 = 50%)
-    """
-    print(f"Loading {input_path}...")
-    mesh = trimesh.load_mesh(input_path)
-    original_faces = len(mesh.faces)
-
-    print(f"  Original: {original_faces} faces")
-
-    # Simplify using quadric edge collapse
-    # target_faces = int(original_faces * target_percent)
-    simplified = mesh.simplify_quadric_decimation(target_percent)
-
-    return simplified
+    """Simplify a mesh to reduce triangle count."""
+    return trimesh.load_mesh(input_path).simplify_quadric_decimation(target_percent)
