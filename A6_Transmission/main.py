@@ -13,11 +13,11 @@ RECALCULATE_PATH = True
 SHOW_PATH = True  # View saved path
 
 # RRT PARAMETERS
-STEP_SIZE = 2.0  # Step size in mm
-ROTATION_STEP_SIZE = np.radians(1.0)  # Step size in radians
-MAX_ITER = 10000  # Max iterations
-GOAL_THRESHOLD = 10.0
-GOAL_SAMPLE_RATE = 0.3  # Sample goal some portion of the time
+STEP_SIZE = 5.0  # Step size in mm
+ROTATION_STEP_SIZE = np.radians(3.0)  # Step size in radians
+MAX_ITER = 20000  # Max iterations
+GOAL_THRESHOLD = 20.0
+GOAL_SAMPLE_RATE = 0.5  # Sample goal some portion of the time
 OUTPUT_FILE = "path.npy"  # Path output file
 SEED = 67
 
@@ -32,18 +32,18 @@ if __name__ == "__main__":
     default_pos = transmission._primary_centroid.copy()
 
     # TODO: switch from the trivial movement to full extraction
-    start_config = np.concatenate([default_pos, [0.0, 0.0, 0.0]])
-    goal_pos = default_pos.copy()
-    # goal_pos[0] += 20  # Pull into the case
-    goal_pos[2] += 50  # Lift, mm
-    goal_config = np.concatenate([goal_pos, [0.0, 0.0, 0.0]])
-
     # start_config = np.concatenate([default_pos, [0.0, 0.0, 0.0]])
     # goal_pos = default_pos.copy()
-    # goal_pos[2] += 350  # Lift 350mm
-    # goal_config = np.concatenate(
-    #     [goal_pos, [0.0, 0.0, 0.0]]
-    # )  # TODO: add twist to place the shaft over the case
+    # # goal_pos[0] += 20  # Pull into the case
+    # goal_pos[2] += 50  # Lift, mm
+    # goal_config = np.concatenate([goal_pos, [0.0, 0.0, 0.0]])
+
+    start_config = np.concatenate([default_pos, [0.0, 0.0, 0.0]])
+    goal_pos = default_pos.copy()
+    goal_pos[2] += 350  # Lift 350mm
+    goal_config = np.concatenate(
+        [goal_pos, [0.0, 0.0, 0.0]]
+    )  # TODO: add twist to place the shaft over the case
 
     start_coll = transmission.check_collision(
         start_config[:3].tolist(), start_config[3:6].tolist()

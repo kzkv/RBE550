@@ -46,8 +46,29 @@ class RRT:
         if seed is not None:
             np.random.seed(seed)
 
-        self.pos_bounds = np.array([[-100, 400], [-100, 300], [-100, 400]])
-        self.rot_bounds = np.array([[-np.radians(5), np.radians(5)] for _ in range(3)])
+        start_pos = self.start.position
+        goal_pos = self.goal.position
+        margin = 50  # mm margin around start/goal TODO: move out of the scope into externally manageable parms
+
+        self.pos_bounds = np.array(
+            [
+                [
+                    min(start_pos[0], goal_pos[0]) - margin,
+                    max(start_pos[0], goal_pos[0]) + margin,
+                ],
+                [
+                    min(start_pos[1], goal_pos[1]) - margin,
+                    max(start_pos[1], goal_pos[1]) + margin,
+                ],
+                [
+                    min(start_pos[2], goal_pos[2]) - margin,
+                    max(start_pos[2], goal_pos[2]) + margin,
+                ],
+            ]
+        )
+        self.rot_bounds = np.array(
+            [[-np.radians(30), np.radians(30)] for _ in range(3)]
+        )
 
     def _format_node(self, node):
         """Format node position and rotation for display (DRY)."""
