@@ -29,6 +29,7 @@ class RRT:
         rotation_step_size,
         max_iter,
         goal_threshold,
+        goal_sample_rate,
         seed=None,
     ):
         self.transmission = transmission
@@ -37,8 +38,9 @@ class RRT:
         self.step_size = step_size
         self.rotation_step_size = rotation_step_size
         self.max_iter = max_iter
-        self.tree = [self.start]
         self.goal_threshold = goal_threshold
+        self.goal_sample_rate = goal_sample_rate
+        self.tree = [self.start]
 
         # Set random seed for reproducibility
         if seed is not None:
@@ -47,8 +49,24 @@ class RRT:
         self.pos_bounds = np.array([[-100, 400], [-100, 300], [-100, 400]])
         self.rot_bounds = np.array([[-np.radians(5), np.radians(5)] for _ in range(3)])
 
+    def _format_node(self, node):
+        """Format node position and rotation for display (DRY)."""
+        pos = node.position
+        rot_deg = np.degrees(node.rotation)
+        return f"pos=[{pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f}]mm, rot=[{rot_deg[0]:.1f}, {rot_deg[1]:.1f}, {rot_deg[2]:.1f}]°"
+
+    def _distance_to_goal(self, node):
+        """Calculate distance from node to goal."""
+        return self.distance(node.config, self.goal.config)
+
     def sample_random(self):
-        """Sample random configuration uniformly."""
+        """Sample random configuration with goal biasing."""
+
+        # Sample goal directly with some probability
+        if np.random.random() < self.goal_sample_rate:
+            return Node(self.goal.config.copy())
+
+        # Otherwise sample uniformly
         pos = np.array(
             [
                 np.random.uniform(self.pos_bounds[i][0], self.pos_bounds[i][1])
@@ -122,6 +140,11 @@ class RRT:
         collision_count = 0
         first_free_iter = None
 
+        # Print start and goal info
+        print(f"Start: {self._format_node(self.start)}")
+        print(f"Goal:  {self._format_node(self.goal)}")
+        print()
+
         for i in range(self.max_iter):
             random_node = self.sample_random()
             nearest = self.nearest_node(random_node)
@@ -132,22 +155,47 @@ class RRT:
 
                 if first_free_iter is None:
                     first_free_iter = i + 1
+                    dist_to_goal = self._distance_to_goal(new_node)
+                    print(f"First free node at iter {first_free_iter}:")
                     print(
-                        f"First free node: iter {first_free_iter}, pos {new_node.position}"
+                        f"  {self._format_node(new_node)}, dist to goal: {dist_to_goal:.1f}"
                     )
 
                 if self.is_goal_reached(new_node):
-                    print(f"Goal reached: iter {i+1}, tree {len(self.tree)} nodes")
+                    final_dist = self._distance_to_goal(new_node)
+                    print(f"\nGoal reached at iter {i+1}:")
+                    print(f"  {self._format_node(new_node)}")
+                    print(
+                        f"  Tree: {len(self.tree)} nodes, dist to goal: {final_dist:.1f}"
+                    )
                     return self._extract_path(new_node)
             else:
                 collision_count += 1
 
             if (i + 1) % 100 == 0:
-                print(
-                    f"[{i+1}/{self.max_iter}] nodes: {len(self.tree)} collisions: {collision_count}"
-                )
+                # Get last added node (most recent free node)
+                if len(self.tree) > 1:
+                    last_node = self.tree[-1]
+                    dist_to_goal = self._distance_to_goal(last_node)
+                    print(
+                        f"[{i+1}/{self.max_iter}] nodes: {len(self.tree)}, coll: {collision_count}"
+                    )
+                    print(
+                        f"  Last: {self._format_node(last_node)}, dist to goal: {dist_to_goal:.1f}"
+                    )
+                else:
+                    print(
+                        f"[{i+1}/{self.max_iter}] nodes: {len(self.tree)}, coll: {collision_count}"
+                    )
 
-        print(f"Max iterations reached: tree={len(self.tree)} coll={collision_count}")
+        print(f"\nMax iterations reached:")
+        print(f"  Tree: {len(self.tree)} nodes, collisions: {collision_count}")
+        if len(self.tree) > 1:
+            last_node = self.tree[-1]
+            dist_to_goal = self._distance_to_goal(last_node)
+            print(
+                f"  Last: {self._format_node(last_node)}, dist to goal: {dist_to_goal:.1f}"
+            )
         return None
 
     def _extract_path(self, goal_node):
