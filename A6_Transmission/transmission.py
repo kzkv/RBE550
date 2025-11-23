@@ -3,8 +3,8 @@ import numpy as np
 from trimesh.viewer import SceneViewer
 
 # Reduce mesh size for faster computation by this much
-SHAFT_MESH_SIMPLIFICATION_PERCENT = 0.75
-CASE_MESH_SIMPLIFICATION_PERCENT = 0.5
+SHAFT_MESH_SIMPLIFICATION_PERCENT = 0.5
+CASE_MESH_SIMPLIFICATION_PERCENT = 0.25
 
 
 class Transmission:

@@ -46,6 +46,7 @@ class RRT:
         if seed is not None:
             np.random.seed(seed)
 
+        # Tight position bounds focused around start/goal corridor
         start_pos = self.start.position
         goal_pos = self.goal.position
         margin = 50  # mm margin around start/goal TODO: move out of the scope into externally manageable parms
@@ -66,9 +67,33 @@ class RRT:
                 ],
             ]
         )
+
+        # Dynamic rotation bounds based on start and goal
+        # This allows RRT to explore from start orientation to goal orientation
+        start_rot = self.start.rotation
+        goal_rot = self.goal.rotation
+        rot_margin = np.radians(10)  # 10° margin beyond goal
+
         self.rot_bounds = np.array(
-            [[-np.radians(30), np.radians(30)] for _ in range(3)]
+            [
+                [
+                    min(start_rot[0], goal_rot[0]) - rot_margin,
+                    max(start_rot[0], goal_rot[0]) + rot_margin,
+                ],  # Roll
+                [
+                    min(start_rot[1], goal_rot[1]) - rot_margin,
+                    max(start_rot[1], goal_rot[1]) + rot_margin,
+                ],  # Pitch
+                [
+                    min(start_rot[2], goal_rot[2]) - rot_margin,
+                    max(start_rot[2], goal_rot[2]) + rot_margin,
+                ],  # Yaw
+            ]
         )
+
+        # Track best node seen so far
+        self.best_node = self.start
+        self.best_dist = self._distance_to_goal(self.start)
 
     def _format_node(self, node):
         """Format node position and rotation for display (DRY)."""
@@ -87,7 +112,7 @@ class RRT:
         if np.random.random() < self.goal_sample_rate:
             return Node(self.goal.config.copy())
 
-        # Otherwise sample uniformly
+        # Otherwise sample uniformly in focused bounds
         pos = np.array(
             [
                 np.random.uniform(self.pos_bounds[i][0], self.pos_bounds[i][1])
@@ -164,6 +189,16 @@ class RRT:
         # Print start and goal info
         print(f"Start: {self._format_node(self.start)}")
         print(f"Goal:  {self._format_node(self.goal)}")
+        print(
+            f"Position bounds: X=[{self.pos_bounds[0][0]:.0f}, {self.pos_bounds[0][1]:.0f}], "
+            f"Y=[{self.pos_bounds[1][0]:.0f}, {self.pos_bounds[1][1]:.0f}], "
+            f"Z=[{self.pos_bounds[2][0]:.0f}, {self.pos_bounds[2][1]:.0f}]"
+        )
+        print(
+            f"Rotation bounds: Roll=[{np.degrees(self.rot_bounds[0][0]):.0f}°, {np.degrees(self.rot_bounds[0][1]):.0f}°], "
+            f"Pitch=[{np.degrees(self.rot_bounds[1][0]):.0f}°, {np.degrees(self.rot_bounds[1][1]):.0f}°], "
+            f"Yaw=[{np.degrees(self.rot_bounds[2][0]):.0f}°, {np.degrees(self.rot_bounds[2][1]):.0f}°]"
+        )
         print()
 
         for i in range(self.max_iter):
@@ -174,13 +209,16 @@ class RRT:
             if self.is_collision_free(new_node):
                 self.tree.append(new_node)
 
+                # Track best node
+                dist = self._distance_to_goal(new_node)
+                if dist < self.best_dist:
+                    self.best_node = new_node
+                    self.best_dist = dist
+
                 if first_free_iter is None:
                     first_free_iter = i + 1
-                    dist_to_goal = self._distance_to_goal(new_node)
                     print(f"First free node at iter {first_free_iter}:")
-                    print(
-                        f"  {self._format_node(new_node)}, dist to goal: {dist_to_goal:.1f}"
-                    )
+                    print(f"  {self._format_node(new_node)}, dist to goal: {dist:.1f}")
 
                 if self.is_goal_reached(new_node):
                     final_dist = self._distance_to_goal(new_node)
@@ -194,15 +232,18 @@ class RRT:
                 collision_count += 1
 
             if (i + 1) % 100 == 0:
-                # Get last added node (most recent free node)
+                # Show both last node and best node
                 if len(self.tree) > 1:
                     last_node = self.tree[-1]
-                    dist_to_goal = self._distance_to_goal(last_node)
+                    last_dist = self._distance_to_goal(last_node)
                     print(
                         f"[{i+1}/{self.max_iter}] nodes: {len(self.tree)}, coll: {collision_count}"
                     )
                     print(
-                        f"  Last: {self._format_node(last_node)}, dist to goal: {dist_to_goal:.1f}"
+                        f"  Last: {self._format_node(last_node)}, dist: {last_dist:.1f}"
+                    )
+                    print(
+                        f"  Best: {self._format_node(self.best_node)}, dist: {self.best_dist:.1f}"
                     )
                 else:
                     print(
@@ -211,12 +252,13 @@ class RRT:
 
         print(f"\nMax iterations reached:")
         print(f"  Tree: {len(self.tree)} nodes, collisions: {collision_count}")
+        print(
+            f"  Best node achieved: {self._format_node(self.best_node)}, dist: {self.best_dist:.1f}"
+        )
         if len(self.tree) > 1:
             last_node = self.tree[-1]
-            dist_to_goal = self._distance_to_goal(last_node)
-            print(
-                f"  Last: {self._format_node(last_node)}, dist to goal: {dist_to_goal:.1f}"
-            )
+            last_dist = self._distance_to_goal(last_node)
+            print(f"  Last node: {self._format_node(last_node)}, dist: {last_dist:.1f}")
         return None
 
     def _extract_path(self, goal_node):
