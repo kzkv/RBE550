@@ -13,7 +13,7 @@ COLOR_PRIMARY = [255, 165, 0, 255]
 COLOR_START = [255, 0, 0, 255]
 COLOR_GOAL = [0, 255, 0, 255]
 COLOR_END = [0, 255, 0, 255]
-COLOR_INTERMEDIATE = [0, 100, 255, 100]
+COLOR_INTERMEDIATE = [0, 100, 255, 150]
 COLOR_WAYPOINT = [255, 0, 0, 255]
 
 
@@ -76,8 +76,8 @@ class Transmission:
     def create_base_scene(self):
         """Create a scene with case and counter-shaft only (no primary)."""
         scene = trimesh.Scene()
-        scene.add_geometry(self.case, node_name="case")
         scene.add_geometry(self.counter, node_name="counter")
+        scene.add_geometry(self.case, node_name="case")
         return scene
 
     def add_primary_to_scene(self, scene, config, color, node_name="primary"):
@@ -86,9 +86,8 @@ class Transmission:
         primary_copy.visual.face_colors = color
         scene.add_geometry(primary_copy, node_name=node_name)
 
-    def add_waypoint_sphere(
-        self, scene, position, radius=3.0, color=None, node_name=None
-    ):
+    @staticmethod
+    def add_waypoint_sphere(scene, position, radius=3.0, color=None, node_name=None):
         """Add a waypoint sphere marker to scene."""
         if color is None:
             color = COLOR_WAYPOINT
