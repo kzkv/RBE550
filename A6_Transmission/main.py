@@ -3,6 +3,7 @@
 # See Gen AI usage approach write-up in the report
 
 import numpy as np
+import trimesh
 from transmission import (
     Transmission,
     COLOR_START,
@@ -13,10 +14,10 @@ from transmission import (
 from rrt import RRT
 
 # Configuration
-RECALCULATE_PATH = False
+RECALCULATE_PATH = True
 SHOW_GOAL = False  # Show goal pose
-SHOW_PATH = True  # View saved path
-ANIMATE_PATH = False  # Animate path
+SHOW_PATH = False  # View saved path
+ANIMATE_PATH = True  # Animate path
 
 # RRT parameters
 STEP_SIZE = 5.0  # Step size in mm
@@ -27,12 +28,12 @@ GOAL_SAMPLE_RATE = 0.1  # Sample goal some portion of the time
 POS_MARGIN = 50.0  # mm, margin around start/goal for position bounds
 ROT_MARGIN_DEG = 10.0  # Degree margin beyond goal for rotation bounds
 OUTPUT_FILE = "path.npy"  # Path output file
-SEED = 67
+SEED = None  # Seed for repeatable RNG to work on performance optimizations
 
 # Visualization parameters
 PATH_FILE = "path.npy"  # Path file to visualize
 CAMERA = {"angles": [np.radians(75), np.radians(0), np.radians(0)], "distance": 800}
-ANIMATION_SPEED = 1.0  # Speed multiplier
+ANIMATION_SPEED = 0.5  # Speed multiplier
 
 if __name__ == "__main__":
     path_found = False
@@ -89,15 +90,18 @@ if __name__ == "__main__":
         scene = transmission.create_base_scene()
         transmission.add_primary_to_scene(scene, start_config, COLOR_START, "start")
         transmission.add_primary_to_scene(scene, goal_config, COLOR_GOAL, "goal")
-        scene.set_camera(**CAMERA)
-        scene.show()
+        transmission.show(scene, CAMERA)
 
     # Visualize the saved path
     if SHOW_PATH and (not RECALCULATE_PATH or path_found):
         path = np.load(PATH_FILE)
         print(f"\nLoaded path: {len(path)} waypoints")
 
-        scene = transmission.create_base_scene()
+        # Build scene with custom ordering: counter, primaries, waypoints, case last
+        scene = trimesh.Scene()
+        transmission.add_counter_to_scene(scene)
+
+        # Add start and end poses
         transmission.add_primary_to_scene(scene, start_config, COLOR_START, "start")
         transmission.add_primary_to_scene(scene, path[-1], COLOR_END, "end")
 
@@ -113,8 +117,10 @@ if __name__ == "__main__":
                 scene, config[:3], node_name=f"waypoint_{i}"
             )
 
-        scene.set_camera(**CAMERA)
-        scene.show()
+        # Add case last for better transparency rendering
+        transmission.add_case_to_scene(scene)
+
+        transmission.show(scene, CAMERA)
 
     # Animate the saved path
     if ANIMATE_PATH and (not RECALCULATE_PATH or path_found):

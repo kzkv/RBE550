@@ -73,22 +73,19 @@ class Transmission:
         primary_test = self.set_primary_pose(position, rotation)
         return self._collision_manager.in_collision_single(primary_test)
 
-    def create_base_scene(self):
-        """Create a scene with case and counter-shaft only (no primary)."""
-        scene = trimesh.Scene()
-        scene.add_geometry(self.counter, node_name="counter")
-        scene.add_geometry(self.case, node_name="case")
-        return scene
+    def add_counter_to_scene(self, scene, node_name="counter"):
+        scene.add_geometry(self.counter, node_name=node_name)
+
+    def add_case_to_scene(self, scene, node_name="case"):
+        scene.add_geometry(self.case, node_name=node_name)
 
     def add_primary_to_scene(self, scene, config, color, node_name="primary"):
-        """Add a primary shaft to scene at given config with specified color."""
         primary_copy = self.set_primary_pose(config[:3], config[3:6])
         primary_copy.visual.face_colors = color
         scene.add_geometry(primary_copy, node_name=node_name)
 
     @staticmethod
     def add_waypoint_sphere(scene, position, radius=3.0, color=None, node_name=None):
-        """Add a waypoint sphere marker to scene."""
         if color is None:
             color = COLOR_WAYPOINT
         sphere = trimesh.creation.icosphere(radius=radius)
@@ -96,24 +93,20 @@ class Transmission:
         sphere.visual.face_colors = color
         scene.add_geometry(sphere, node_name=node_name)
 
-    def _create_scene(self):
-        """Create a scene with current geometry."""
+    def create_base_scene(self):
+        """Create a scene with counter-shaft and case (no primary)."""
         scene = trimesh.Scene()
-        scene.add_geometry(self.case, node_name="case")
-        scene.add_geometry(self.counter, node_name="counter")
-        scene.add_geometry(self.primary, node_name="primary")
+        self.add_counter_to_scene(scene)
+        self.add_case_to_scene(scene)
         return scene
 
-    def show(self, camera_angle):
-        """Display static 3D view."""
-        scene = self._create_scene()
+    def show(self, scene, camera_angle):
         scene.set_camera(
             angles=camera_angle.get("angles"), distance=camera_angle.get("distance")
         )
         scene.show()
 
     def animate_path(self, path, camera_angle, speed=1.0, interpolate=True):
-        """Animate primary shaft along path."""
         if len(path) == 0:
             print("Empty path")
             return
@@ -130,7 +123,16 @@ class Transmission:
         waypoints = np.array(waypoints)
         num_waypoints = len(waypoints)
 
-        scene = self._create_scene()
+        # Build scene with counter, primary at initial pose, and case last
+        scene = trimesh.Scene()
+        self.add_counter_to_scene(scene)
+
+        # Add primary at initial position for animation
+        primary_copy = self.primary.copy()
+        scene.add_geometry(primary_copy, node_name="primary")
+
+        self.add_case_to_scene(scene)
+
         scene.set_camera(
             angles=camera_angle.get("angles"), distance=camera_angle.get("distance")
         )
@@ -171,5 +173,4 @@ class Transmission:
 
 
 def simplify_mesh(input_path, target_percent=0.5):
-    """Simplify a mesh to reduce triangle count."""
     return trimesh.load_mesh(input_path).simplify_quadric_decimation(target_percent)
