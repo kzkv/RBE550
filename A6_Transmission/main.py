@@ -87,40 +87,38 @@ if __name__ == "__main__":
 
     # Visualize goal pose
     if SHOW_GOAL:
-        scene = transmission.create_base_scene()
+        scene = trimesh.Scene()
+        scene.add_geometry(transmission.counter, node_name="counter")
         transmission.add_primary_to_scene(scene, start_config, COLOR_START, "start")
         transmission.add_primary_to_scene(scene, goal_config, COLOR_GOAL, "goal")
-        transmission.show(scene, CAMERA)
+        scene.add_geometry(transmission.case, node_name="case")
+        scene.set_camera(angles=CAMERA["angles"], distance=CAMERA["distance"])
+        scene.show()
 
     # Visualize the saved path
     if SHOW_PATH and (not RECALCULATE_PATH or path_found):
         path = np.load(PATH_FILE)
         print(f"\nLoaded path: {len(path)} waypoints")
 
-        # Build scene with custom ordering: counter, primaries, waypoints, case last
         scene = trimesh.Scene()
-        transmission.add_counter_to_scene(scene)
+        scene.add_geometry(transmission.counter, node_name="counter")
 
-        # Add start and end poses
         transmission.add_primary_to_scene(scene, start_config, COLOR_START, "start")
         transmission.add_primary_to_scene(scene, path[-1], COLOR_END, "end")
 
-        # Intermediate poses, display every 10th
         for i in range(10, len(path) - 1, 10):
             transmission.add_primary_to_scene(
                 scene, path[i], COLOR_INTERMEDIATE, f"mid_{i}"
             )
 
-        # Waypoint markers
         for i, config in enumerate(path):
             transmission.add_waypoint_sphere(
                 scene, config[:3], node_name=f"waypoint_{i}"
             )
 
-        # Add case last for better transparency rendering
-        transmission.add_case_to_scene(scene)
-
-        transmission.show(scene, CAMERA)
+        scene.add_geometry(transmission.case, node_name="case")
+        scene.set_camera(angles=CAMERA["angles"], distance=CAMERA["distance"])
+        scene.show()
 
     # Animate the saved path
     if ANIMATE_PATH and (not RECALCULATE_PATH or path_found):
