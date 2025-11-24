@@ -251,3 +251,28 @@ class RRT:
             current = current.parent
         path.reverse()
         return path
+
+    def save_tree(self, filename):
+        """Save the RRT tree structure to file."""
+        configs = []
+        parent_indices = []
+
+        for node in self.tree:
+            configs.append(node.config)
+            if node.parent is None:
+                parent_indices.append(-1)
+            else:
+                parent_idx = self.tree.index(node.parent)
+                parent_indices.append(parent_idx)
+
+        tree_data = {
+            "configs": np.array(configs),
+            "parent_indices": np.array(parent_indices),
+        }
+        np.save(filename, tree_data)
+
+    @staticmethod
+    def load_tree(filename):
+        """Load RRT tree structure from file."""
+        tree_data = np.load(filename, allow_pickle=True).item()
+        return tree_data["configs"], tree_data["parent_indices"]

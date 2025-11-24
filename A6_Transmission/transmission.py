@@ -7,13 +7,14 @@ CASE_MESH_SIMPLIFICATION_PERCENT = 0.25
 
 # Visualization colors [R, G, B, Alpha]
 COLOR_CASE = [100, 100, 200, 100]
-COLOR_COUNTER = [128, 128, 128, 255]
+COLOR_COUNTER = [128, 128, 128, 150]
 COLOR_PRIMARY = [255, 165, 0, 255]
-COLOR_START = [255, 0, 0, 255]
-COLOR_GOAL = [0, 255, 0, 255]
-COLOR_END = [0, 255, 0, 255]
-COLOR_INTERMEDIATE = [0, 100, 255, 150]
+COLOR_START = [255, 0, 0, 100]
+COLOR_GOAL = [0, 255, 0, 100]
+COLOR_END = [0, 255, 0, 100]
+COLOR_INTERMEDIATE = [0, 100, 255, 50]
 COLOR_WAYPOINT = [255, 0, 0, 255]
+COLOR_TREE_EDGE = [150, 150, 150, 255]
 
 
 class Transmission:
@@ -79,6 +80,27 @@ class Transmission:
         sphere.apply_translation(position)
         sphere.visual.face_colors = color
         scene.add_geometry(sphere, node_name=node_name)
+
+    @staticmethod
+    def add_tree_edges(
+        scene, configs, parent_indices, color=None, node_name="tree_edges"
+    ):
+        """Add RRT tree edges to the scene."""
+        if color is None:
+            color = COLOR_TREE_EDGE
+
+        edges = []
+        for i, parent_idx in enumerate(parent_indices):
+            if parent_idx >= 0:
+                child_pos = configs[i][:3]
+                parent_pos = configs[parent_idx][:3]
+                edges.append([parent_pos, child_pos])
+
+        if edges:
+            edge_geometry = trimesh.load_path(edges)
+            for entity in edge_geometry.entities:
+                entity.color = color
+            scene.add_geometry(edge_geometry, node_name=node_name)
 
     def animate_path(self, path, camera_angle, speed=1.0, interpolate=True):
         waypoints = np.asarray(path, dtype=float)

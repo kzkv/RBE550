@@ -14,10 +14,11 @@ from transmission import (
 from rrt import RRT
 
 # Configuration
-RECALCULATE_PATH = True
+RECALCULATE_PATH = False
 SHOW_GOAL = False  # Show goal pose
-SHOW_PATH = False  # View saved path
-ANIMATE_PATH = True  # Animate path
+SHOW_PATH = True  # View saved path
+SHOW_TREE = False  # View RRT tree
+ANIMATE_PATH = False  # Animate path
 
 # RRT parameters
 STEP_SIZE = 5.0  # Step size in mm
@@ -28,7 +29,8 @@ GOAL_SAMPLE_RATE = 0.1  # Sample goal some portion of the time
 POS_MARGIN = 50.0  # mm, margin around start/goal for position bounds
 ROT_MARGIN_DEG = 10.0  # Degree margin beyond goal for rotation bounds
 OUTPUT_FILE = "path.npy"  # Path output file
-SEED = None  # Seed for repeatable RNG to work on performance optimizations
+TREE_FILE = "tree.npy"  # Tree output file
+SEED = None
 
 # Visualization parameters
 PATH_FILE = "path.npy"  # Path file to visualize
@@ -81,6 +83,8 @@ if __name__ == "__main__":
         if path:
             print(f"\nSUCCESS: {len(path)} waypoints, {len(rrt.tree)} nodes")
             np.save(OUTPUT_FILE, np.array(path))
+            rrt.save_tree(TREE_FILE)
+            print(f"Saved path to {OUTPUT_FILE} and tree to {TREE_FILE}")
             path_found = True
         else:
             print("\nFAILED: No path found")
@@ -115,6 +119,22 @@ if __name__ == "__main__":
             transmission.add_waypoint_sphere(
                 scene, config[:3], node_name=f"waypoint_{i}"
             )
+
+        scene.add_geometry(transmission.case, node_name="case")
+        scene.set_camera(angles=CAMERA["angles"], distance=CAMERA["distance"])
+        scene.show()
+
+    # Visualize RRT tree
+    if SHOW_TREE and (not RECALCULATE_PATH or path_found):
+        from rrt import RRT
+
+        configs, parent_indices = RRT.load_tree(TREE_FILE)
+        print(f"\nLoaded tree: {len(configs)} nodes")
+
+        scene = trimesh.Scene()
+        scene.add_geometry(transmission.counter, node_name="counter")
+
+        transmission.add_tree_edges(scene, configs, parent_indices)
 
         scene.add_geometry(transmission.case, node_name="case")
         scene.set_camera(angles=CAMERA["angles"], distance=CAMERA["distance"])
