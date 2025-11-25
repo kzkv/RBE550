@@ -1,6 +1,5 @@
 trimesh~=4.9.0
 pyglet==1.5.31
 scipy~=1.16.3
-networkx~=3.5
 python-fcl~=0.7.0.10
 fast-simplification~=0.1.12

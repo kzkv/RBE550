@@ -16,9 +16,9 @@ from rrt import RRT
 # Configuration
 RECALCULATE_PATH = False
 SHOW_GOAL = False  # Show goal pose
-SHOW_PATH = True  # View saved path
+SHOW_PATH = False  # View saved path
 SHOW_TREE = False  # View RRT tree
-ANIMATE_PATH = False  # Animate path
+ANIMATE_PATH = True  # Animate path
 
 # RRT parameters
 STEP_SIZE = 5.0  # Step size in mm
@@ -34,7 +34,7 @@ SEED = None
 
 # Visualization parameters
 PATH_FILE = "path.npy"  # Path file to visualize
-CAMERA = {"angles": [np.radians(75), np.radians(0), np.radians(0)], "distance": 800}
+CAMERA = {"angles": [np.radians(60), np.radians(0), np.radians(-45)], "distance": 800}
 ANIMATION_SPEED = 0.5  # Speed multiplier
 
 if __name__ == "__main__":
